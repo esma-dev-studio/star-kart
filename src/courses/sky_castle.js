@@ -75,7 +75,7 @@
     standSwaySpeed: 1.7,
     standSwayAmp: 0.05,
     bannerSpots: [
-      { t: 0.03, side: 1, text: 'SUGARIA GP' },
+      { t: 0.03, side: 1, text: 'STAR KART GP' },
       { t: 0.46, side: -1, text: 'Soda Splash Racing' },
       { t: 0.94, side: 1, text: 'SKY CASTLE CUP' },
     ],

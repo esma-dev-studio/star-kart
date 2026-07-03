@@ -536,7 +536,7 @@ Game.Course = class Course {
     x.fillStyle = '#fff6fa';
     x.font = 'bold 50px sans-serif';
     x.textAlign = 'center'; x.textBaseline = 'middle';
-    x.fillText('SUGARIA GP', 256, 48);
+    x.fillText('STAR KART GP', 256, 48);
     const texMat = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cv) });
     const pinkMat = new THREE.MeshLambertMaterial({ color: 0xff8fb0 });
     const banner = new THREE.Mesh(

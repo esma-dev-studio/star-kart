@@ -326,8 +326,8 @@
     // =========================================================
     _buildTitleLayer() {
       const layer = el('div', 'layer');
-      layer.appendChild(el('div', 'sg-title-logo', 'シュガリア<br>グランプリ'));
-      layer.appendChild(el('div', 'sg-title-sub', 'SUGARIA GRAND PRIX'));
+      layer.appendChild(el('div', 'sg-title-logo', 'スター<br>カート'));
+      layer.appendChild(el('div', 'sg-title-sub', 'STAR KART GRAND PRIX'));
 
       for (let i = 0; i < 10; i++) {
         const sp = el('div', 'sg-sparkle', '✦');

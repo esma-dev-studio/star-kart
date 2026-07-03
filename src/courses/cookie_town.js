@@ -42,7 +42,7 @@
     flagChainSpots: [0.10, 0.335, 0.605],  // 道路横断フラッグチェーン3箇所
     flagChainFlags: 9,
     banners: [
-      { t: 0.045, side: 1, text: 'SUGARIA GP' },
+      { t: 0.045, side: 1, text: 'STAR KART GP' },
       { t: 0.30, side: -1, text: 'TURBO WAFFLE' },
       { t: 0.62, side: 1, text: 'Soda Splash Racing' },
       { t: 0.90, side: -1, text: 'COOKIE TOWN' },
@@ -491,7 +491,7 @@
     x.textAlign = 'center';
     x.save(); x.translate(16, 48); x.rotate(Math.PI / 2);
     x.fillStyle = '#5a3a26';
-    x.fillText('SUGARIA', 0, 6);
+    x.fillText('STAR KART', 0, 6);
     x.restore();
     const flagMat = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cv), side: THREE.DoubleSide });
     const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.75, 2.3), flagMat);
