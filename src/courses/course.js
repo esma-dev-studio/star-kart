@@ -126,7 +126,7 @@ Game.Course = class Course {
 
     // 路面 + 路肩
     g.add(this.buildStrip(-1, 1, this.roadTexture(c), 0, (t) => !this.inZone(this.gaps, t)));
-    const offMat = new THREE.MeshLambertMaterial({ color: c.offroad });
+    const offMat = new THREE.MeshLambertMaterial({ color: c.offroad, side: THREE.DoubleSide });
     const skirtOk = (t) => !this.inZone(this.gaps, t) && !this.inZone(this.fallZones, t);
     g.add(this.buildStrip(1, 1 + this.offroadWidth / 7, offMat, -0.02, skirtOk, true));
     g.add(this.buildStrip(-1 - this.offroadWidth / 7, -1, offMat, -0.02, skirtOk, true));
@@ -170,7 +170,9 @@ Game.Course = class Course {
       add(i, r0); add(i, r1); add(j, r0); add(j, r1);
       const v0 = (i / s.count) * s.total / 6, v1 = ((i + 1) / s.count) * s.total / 6;
       uv.push(0, v0, 1, v0, 0, v1, 1, v1);
-      idxArr.push(vi, vi + 2, vi + 1, vi + 1, vi + 2, vi + 3);
+      // 巻き順は「上から見て反時計回り」= 法線が上向きになるようにする
+      // (逆順だと背面カリングで路面が上から見えなくなる)
+      idxArr.push(vi, vi + 1, vi + 2, vi + 2, vi + 1, vi + 3);
       vi += 4;
     }
     const geo = new THREE.BufferGeometry();
@@ -178,7 +180,8 @@ Game.Course = class Course {
     geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
     geo.setIndex(idxArr);
     geo.computeVertexNormals();
-    const mat = matOrTex.isMaterial ? matOrTex : new THREE.MeshLambertMaterial({ map: matOrTex });
+    const mat = matOrTex.isMaterial ? matOrTex
+      : new THREE.MeshLambertMaterial({ map: matOrTex, side: THREE.DoubleSide });
     return new THREE.Mesh(geo, mat);
   }
 
@@ -212,7 +215,7 @@ Game.Course = class Course {
       pos.push(pt.x + nr.x * a, pt.y + 0.07, pt.z + nr.z * a);
       pos.push(pt.x + nr.x * b, pt.y + 0.07, pt.z + nr.z * b);
       uv.push(0, k / 2, 1, k / 2);
-      if (k < n) { idxArr.push(vi, vi + 2, vi + 1, vi + 1, vi + 2, vi + 3); }
+      if (k < n) { idxArr.push(vi, vi + 1, vi + 2, vi + 2, vi + 1, vi + 3); }
       vi += 2;
     }
     const geo = new THREE.BufferGeometry();

@@ -227,6 +227,9 @@
       if (next === 'result') this._enterResult();
       if (next === 'award') this._enterAward();
 
+      // タッチ操作ボタンはレース中のみ表示
+      if (Game.touch) Game.touch.onState(next);
+
       // BGM切替(レース用BGMは_launchRaceで開始する)
       if (Game.audio) {
         if (next === 'title') Game.audio.playBgm('title');

@@ -487,10 +487,11 @@
     if (placeholder && parent) parent.remove(placeholder);
 
     const charGroup = build(id);
-    // 身長約1.2 → カート座席にフィットするよう縮小し、座っているように沈める
-    const scale = 0.62;
+    // 身長約1.2 → カートの主役として大きく見せる(カートレースはキャラが顔なので
+    // 控えめなスケールだとシートに隠れてしまう。実画面確認で1.1に調整済み)
+    const scale = 1.1;
     charGroup.scale.setScalar(scale);
-    charGroup.position.set(pos.x, pos.y - 0.55, pos.z);
+    charGroup.position.set(pos.x, pos.y - 0.15, pos.z);
     if (parent) parent.add(charGroup);
     else kart.group.add(charGroup);
 

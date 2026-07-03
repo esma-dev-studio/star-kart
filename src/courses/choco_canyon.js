@@ -17,13 +17,15 @@ Game.courses = Game.courses || {};
   // チョコの滝を配置する進行度(渓谷壁沿い、river区間の縁)
   const WATERFALL_SPOTS = [0.335, 0.415];
 
+  // ミルクチョコ&キャラメルの明るい暖色。暗くしすぎると夜のように見えて
+  // 「甘い冒険」の世界観が伝わらない(実プレイ確認で調整済み)
   const colors = {
-    sky: 0x4a2e1f,
-    fog: 0x3a2216,
-    ground: 0x2c1810,
-    road: '#6b3a22',
-    edge: '#e8b878',
-    offroad: 0x4a3018,
+    sky: 0xe8b06a,
+    fog: 0xd99e5e,
+    ground: 0x8a5a34,
+    road: '#8f4f2c',
+    edge: '#ffdca0',
+    offroad: 0x6e4526,
   };
 
   // 全長概算1067×1.05≈1120。制御点は起伏15%以下(一部16.8%区間は
@@ -148,11 +150,12 @@ Game.courses = Game.courses || {};
     const s = course.spline;
     let count = 0;
 
-    const riverMat = new THREE.MeshLambertMaterial({ map: chocoRiverTexture() });
+    // 帯メッシュ/薄板は巻き順に依存せず見えるよう両面描画にする
+    const riverMat = new THREE.MeshLambertMaterial({ map: chocoRiverTexture(), side: THREE.DoubleSide });
     const waferMat = new THREE.MeshLambertMaterial({ map: waferTexture() });
     const caramelMat = new THREE.MeshLambertMaterial({ map: caramelTexture() });
     const fallsMat = new THREE.MeshBasicMaterial({
-      map: chocoRiverTexture(), transparent: true, opacity: 0.85,
+      map: chocoRiverTexture(), transparent: true, opacity: 0.85, side: THREE.DoubleSide,
     });
 
     // --- チョコの川(fallZone区間に沿って路面より低い帯を敷く) ---

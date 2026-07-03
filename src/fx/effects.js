@@ -106,8 +106,19 @@ const FX_TUNING = {
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     geo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+    // 丸くて柔らかい粒にするためのスプライトテクスチャ(無指定だと四角い点になる)
+    const spriteCv = document.createElement('canvas');
+    spriteCv.width = 32; spriteCv.height = 32;
+    const sctx = spriteCv.getContext('2d');
+    const grad = sctx.createRadialGradient(16, 16, 0, 16, 16, 16);
+    grad.addColorStop(0, 'rgba(255,255,255,1)');
+    grad.addColorStop(0.55, 'rgba(255,255,255,0.85)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    sctx.fillStyle = grad;
+    sctx.fillRect(0, 0, 32, 32);
     const mat = new THREE.PointsMaterial({
       size: FX_TUNING.particleBaseSize,
+      map: new THREE.CanvasTexture(spriteCv),
       vertexColors: true,
       transparent: true,
       depthWrite: false,
