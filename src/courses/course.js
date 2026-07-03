@@ -112,7 +112,12 @@ Game.Course = class Course {
 
     scene.background = new THREE.Color(c.sky);
     scene.fog = new THREE.FogExp2(c.fog ?? c.sky, this.def.fogDensity ?? 0.0038);
-    g.add(this.buildSkyDome(c));
+    const dome = this.buildSkyDome(c);
+    g.add(dome);
+    const clouds = this.def.clouds === false ? null : this.buildClouds();
+    if (clouds) g.add(clouds);
+    const horizon = this.def.horizon === false ? null : this.buildHorizon(c);
+    if (horizon) g.add(horizon);
 
     // 地面: 中心=地面色→外周=フォグ色のラジアルグラデーションで地平線に溶かす
     let minY = Infinity;
@@ -126,23 +131,35 @@ Game.Course = class Course {
     g.add(ground);
 
     // 路面 + 路肩
-    g.add(this.buildStrip(-1, 1, this.roadTexture(c), 0, (t) => !this.inZone(this.gaps, t)));
+    const roadMesh = this.buildStrip(-1, 1, this.roadTexture(c), 0, (t) => !this.inZone(this.gaps, t));
+    g.add(roadMesh);
     const offMat = new THREE.MeshLambertMaterial({ color: c.offroad, side: THREE.DoubleSide });
     const skirtOk = (t) => !this.inZone(this.gaps, t) && !this.inZone(this.fallZones, t);
-    g.add(this.buildStrip(1, 1 + this.offroadWidth / 7, offMat, -0.02, skirtOk, true));
-    g.add(this.buildStrip(-1 - this.offroadWidth / 7, -1, offMat, -0.02, skirtOk, true));
+    const skirtR = this.buildStrip(1, 1 + this.offroadWidth / 7, offMat, -0.02, skirtOk, true);
+    const skirtL = this.buildStrip(-1 - this.offroadWidth / 7, -1, offMat, -0.02, skirtOk, true);
+    g.add(skirtR); g.add(skirtL);
 
     // ブースト/ジャンプパッド
-    for (const p of this.pads) g.add(this.buildPadMesh(p));
+    const padMeshes = this.pads.map((p) => this.buildPadMesh(p));
+    for (const m of padMeshes) g.add(m);
 
     // スタートライン(チェッカー)とゲート
-    g.add(this.buildStartLine());
+    const startLine = this.buildStartLine();
+    g.add(startLine);
     g.add(this.buildGate());
 
     // 急コーナーの外側にシェブロン看板(コーナー予告+レース感)
     for (const m of this.buildCornerSigns()) g.add(m);
 
     if (this.def.decorate) this.def.decorate(g, this);
+
+    // 動的シャドウ: 装飾・ゲート・看板は影を落とし、路面・地面は受けるだけにする
+    g.traverse((o) => {
+      if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; }
+    });
+    const noCast = [dome, ground, roadMesh, skirtR, skirtL, startLine, ...padMeshes];
+    if (horizon) noCast.push(...horizon.children);
+    for (const m of noCast) { m.castShadow = false; }
 
     // ミニマップ用外形
     const mm = [];
@@ -216,6 +233,56 @@ Game.Course = class Course {
     return dome;
   }
 
+  // ふわふわの雲(ビルボード)。def.clouds === false で無効
+  buildClouds() {
+    const grp = new THREE.Group();
+    const cv = document.createElement('canvas');
+    cv.width = 128; cv.height = 64;
+    const x = cv.getContext('2d');
+    const blob = (bx, by, r) => {
+      const gr = x.createRadialGradient(bx, by, 0, bx, by, r);
+      gr.addColorStop(0, 'rgba(255,255,255,0.95)');
+      gr.addColorStop(1, 'rgba(255,255,255,0)');
+      x.fillStyle = gr;
+      x.beginPath(); x.arc(bx, by, r, 0, Math.PI * 2); x.fill();
+    };
+    blob(40, 40, 26); blob(64, 32, 30); blob(90, 42, 24); blob(60, 46, 20);
+    const tex = new THREE.CanvasTexture(cv);
+    let seed = 99;
+    const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    for (let i = 0; i < 10; i++) {
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: tex, transparent: true, opacity: 0.85, fog: false, depthWrite: false,
+      }));
+      const a = rnd() * Math.PI * 2, r = 320 + rnd() * 280;
+      sp.position.set(Math.cos(a) * r, 95 + rnd() * 80, Math.sin(a) * r);
+      const sc = 70 + rnd() * 70;
+      sp.scale.set(sc, sc * 0.5, 1);
+      grp.add(sp);
+    }
+    return grp;
+  }
+
+  // 地平線の山並み(遠景の奥行き)。def.horizon === false で無効
+  buildHorizon(c) {
+    const grp = new THREE.Group();
+    const gcol = new THREE.Color(c.ground), fcol = new THREE.Color(c.fog ?? c.sky);
+    let seed = 31;
+    const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14 + rnd() * 0.03) * Math.PI * 2;
+      const r = 480 + rnd() * 160;
+      const h = 34 + rnd() * 55;
+      const cone = new THREE.Mesh(
+        new THREE.ConeGeometry(45 + rnd() * 55, h, 7),
+        new THREE.MeshLambertMaterial({ color: gcol.clone().lerp(fcol, 0.45 + rnd() * 0.2) })
+      );
+      cone.position.set(Math.cos(a) * r, h / 2 - 8, Math.sin(a) * r);
+      grp.add(cone);
+    }
+    return grp;
+  }
+
   groundTexture(c) {
     const cv = document.createElement('canvas');
     cv.width = 512; cv.height = 512;
@@ -244,16 +311,29 @@ Game.Course = class Course {
     cv.width = 256; cv.height = 256;
     const x = cv.getContext('2d');
     x.fillStyle = c.road; x.fillRect(0, 0, 256, 256);
-    // 細かなスペックル(ざらつき)
     let seed = 42;
     const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
-    for (let i = 0; i < 420; i++) {
-      x.fillStyle = rnd() < 0.5 ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
-      const px = rnd() * 256, py = rnd() * 256, r = 1 + rnd() * 2.5;
+    // 舗装の粒状ノイズ(細かく大量に)
+    for (let i = 0; i < 900; i++) {
+      x.fillStyle = rnd() < 0.5 ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.06)';
+      const px = rnd() * 256, py = rnd() * 256, r = 0.6 + rnd() * 1.6;
       x.beginPath(); x.arc(px, py, r, 0, Math.PI * 2); x.fill();
     }
-    // センターの破線
-    x.fillStyle = 'rgba(255,250,235,0.6)';
+    // タイヤの走行帯(車輪が通るラインがうっすら暗い)
+    x.fillStyle = 'rgba(0,0,0,0.07)';
+    x.fillRect(56, 0, 44, 256);
+    x.fillRect(156, 0, 44, 256);
+    // 舗装のひび
+    x.strokeStyle = 'rgba(0,0,0,0.12)'; x.lineWidth = 1.4;
+    for (let cI = 0; cI < 5; cI++) {
+      x.beginPath();
+      let cx0 = 30 + rnd() * 196, cy0 = rnd() * 256;
+      x.moveTo(cx0, cy0);
+      for (let sI = 0; sI < 4; sI++) { cx0 += (rnd() - 0.5) * 30; cy0 += 12 + rnd() * 22; x.lineTo(cx0, cy0); }
+      x.stroke();
+    }
+    // センターの破線(色はコース定義で変更可)
+    x.fillStyle = c.centerLine || 'rgba(255,250,235,0.6)';
     for (let yPos = 8; yPos < 256; yPos += 64) x.fillRect(124, yPos, 8, 34);
     // 両端のキャンディ縁石(斜めストライプ。レース感と世界観を両立)
     const curb = c.curb || '#ff6f91';

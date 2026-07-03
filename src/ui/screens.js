@@ -797,6 +797,7 @@
         ctx.elapsed += dt;
         if (ctx.course.def.animate && ctx.course.group) ctx.course.def.animate(ctx.elapsed, ctx.course.group);
         ctx.cam.update(dt, ctx.playerKart);
+        Game.app.updateSun(ctx.playerKart.pos); // 影のカバー範囲をプレイヤーに追従
         if (Game.fx) Game.fx.update(dt);
         if (Game.audio) Game.audio.update(dt, ctx.playerKart);
       }

@@ -448,12 +448,16 @@ Game.Kart = class Kart {
       this._sparks.push(spark);
     }
 
-    // 丸影
+    // 丸影(動的シャドウの補助として薄く残す。ジャンプ中の接地感に効く)
     const shadow = new THREE.Mesh(new THREE.CircleGeometry(1.5, 20),
-      new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.22, depthWrite: false }));
+      new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.1, depthWrite: false }));
     shadow.rotation.x = -Math.PI / 2;
     this._shadow = shadow;
     g.add(shadow);
+
+    // カート一式は動的シャドウを落とす
+    g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+    shadow.castShadow = false;
 
     this.group = g;
     this._tilt = tilt;

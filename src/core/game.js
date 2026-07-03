@@ -10,6 +10,12 @@ Game.app = {
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+    // リアル寄りの画作り: sRGB出力+フィルミックトーンマップ+ソフトシャドウ
+    this.renderer.outputEncoding = THREE.sRGBEncoding;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.15;
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     container.appendChild(this.renderer.domElement);
 
     this.camera = new THREE.PerspectiveCamera(
@@ -37,12 +43,30 @@ Game.app = {
       });
     }
     this.scene = new THREE.Scene();
-    const hemi = new THREE.HemisphereLight(0xffffff, 0xd8c5a8, 0.62);
+    const hemi = new THREE.HemisphereLight(0xffffff, 0xd8c5a8, 0.55);
     this.scene.add(hemi);
-    const sun = new THREE.DirectionalLight(0xfff3dd, 0.5);
-    sun.position.set(60, 100, 30);
+    const sun = new THREE.DirectionalLight(0xfff3dd, 0.85);
+    sun.position.set(60, 95, 35);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(1024, 1024);
+    sun.shadow.camera.near = 10;
+    sun.shadow.camera.far = 280;
+    const d = 55; // プレイヤー周辺だけをカバーする(updateSunで追従)
+    sun.shadow.camera.left = -d; sun.shadow.camera.right = d;
+    sun.shadow.camera.top = d; sun.shadow.camera.bottom = -d;
+    sun.shadow.bias = -0.0006;
     this.scene.add(sun);
+    this.scene.add(sun.target);
+    this.sun = sun;
     return this.scene;
+  },
+
+  // 影のカバー範囲(シャドウカメラ)をプレイヤーに追従させる
+  updateSun(target) {
+    if (!this.sun) return;
+    this.sun.position.set(target.x + 60, target.y + 95, target.z + 35);
+    this.sun.target.position.set(target.x, target.y, target.z);
+    this.sun.target.updateMatrixWorld();
   },
 
   start(updateFn) {

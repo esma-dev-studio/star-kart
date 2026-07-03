@@ -62,14 +62,17 @@
     controlPoints,
     offroadWidth: 7,
     fogDensity: 0.0032,
+    // リアル寄りの屋外レース感: 青空+緑の草原+アスファルト。
+    // クッキーの家や街灯は「郊外の道沿いのお菓子の街」として残る
     colors: {
-      sky: 0xffe3c2,
-      fog: 0xffe9cf,
-      ground: 0xe8b98a,
-      road: '#c9955f',
+      sky: 0x7fc0ee,
+      fog: 0xcfe6f5,
+      ground: 0x58a53f,
+      road: '#55555e',
       edge: '#fff3df',
       curb: '#ff6f91',
-      offroad: 0xd9a86c,
+      centerLine: '#eec53a',
+      offroad: 0x69b84e,
     },
     // ブーストパッド2箇所: S字明け(コーナー進入前の加速)と広い直線
     boostPads: [

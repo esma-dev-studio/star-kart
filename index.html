@@ -17,6 +17,10 @@
     padding: 8px 12px; border-radius: 10px; pointer-events: none;
   }
   #hud { position: fixed; inset: 0; z-index: 10; pointer-events: none; }
+  #vignette {
+    position: fixed; inset: 0; z-index: 6; pointer-events: none;
+    background: radial-gradient(ellipse at center, rgba(0,0,0,0) 58%, rgba(35,15,30,0.30) 100%);
+  }
   #centerMsg {
     position: fixed; top: 30%; left: 50%; transform: translate(-50%, -50%);
     z-index: 30; color: #fff; font-size: 64px; font-weight: 900;
@@ -27,6 +31,7 @@
 </head>
 <body>
 <div id="app"></div>
+<div id="vignette"></div>
 <div id="hud"></div>
 <div id="centerMsg"></div>
 <div id="debug"></div>

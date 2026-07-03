@@ -494,6 +494,7 @@
     charGroup.position.set(pos.x, pos.y - 0.15, pos.z);
     if (parent) parent.add(charGroup);
     else kart.group.add(charGroup);
+    charGroup.traverse((o) => { if (o.isMesh) o.castShadow = true; }); // キャラも影を落とす
 
     kart.charId = id;
     const def = list.find((c) => c.id === id);

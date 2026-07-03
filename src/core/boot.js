@@ -4,6 +4,17 @@ window.Game = {
   state: 'boot',
 };
 
+// レンダラをsRGB出力にするため、色テクスチャ(CanvasTexture)は常にsRGBとして扱う
+if (typeof THREE !== 'undefined' && THREE.sRGBEncoding !== undefined) {
+  const OrigCanvasTexture = THREE.CanvasTexture;
+  THREE.CanvasTexture = class CanvasTexture extends OrigCanvasTexture {
+    constructor(...args) {
+      super(...args);
+      this.encoding = THREE.sRGBEncoding;
+    }
+  };
+}
+
 // 互換シム: CapsuleGeometryはr134コアに無いため、LatheGeometryで同等品を定義する
 if (typeof THREE !== 'undefined' && !THREE.CapsuleGeometry) {
   THREE.CapsuleGeometry = class CapsuleGeometry extends THREE.LatheGeometry {
