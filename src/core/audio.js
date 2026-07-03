@@ -195,10 +195,16 @@
 
       if (ctx.state === 'suspended') ctx.resume().catch(() => {});
 
-      // タブ復帰等でsuspendedになった場合に備え、可視化イベントで再開を試みる
+      // タブが見えていない間は音を完全に止める(Web Audioはタブ非表示でも鳴り続けるため、
+      // バックグラウンドのタブからBGMが流れ続ける事故を防ぐ)。タブに戻ったら再開する
       if (typeof document !== 'undefined') {
         document.addEventListener('visibilitychange', () => {
-          if (!document.hidden && ctx && ctx.state === 'suspended') ctx.resume().catch(() => {});
+          if (!ctx) return;
+          if (document.hidden) {
+            if (ctx.state === 'running') ctx.suspend().catch(() => {});
+          } else if (ctx.state === 'suspended') {
+            ctx.resume().catch(() => {});
+          }
         });
       }
     } catch (e) {
