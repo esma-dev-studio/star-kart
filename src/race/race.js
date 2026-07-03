@@ -124,7 +124,8 @@
       for (const e of this.entries) {
         let success;
         if (e.controller && e.controller.isAI) {
-          success = Math.random() < ai.rocketStartChance;
+          const dpre = (ai.difficulty || {})[Game.difficulty];
+          success = Math.random() < (dpre ? dpre.rocketStart : ai.rocketStartChance);
         } else {
           success = (this._throttleHeldT.get(e.kart) ?? 0) >= RACE_TUNING.rocketStartWindow;
         }

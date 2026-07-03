@@ -178,11 +178,18 @@
       document.body.appendChild(this.root);
 
       this._buildTitleLayer();
+      this._buildDiffSelectLayer();
       this._buildCharSelectLayer();
       this._buildCourseSelectLayer();
       this._buildRaceLayer();
       this._buildResultLayer();
       this._buildAwardLayer();
+
+      // CPUの強さ(前回選択を記憶)
+      this.difficulty = (() => {
+        try { return localStorage.getItem('sugariaGP_diff') || 'normal'; } catch (e) { return 'normal'; }
+      })();
+      Game.difficulty = this.difficulty;
 
       // レース関連の可変状態
       this.mode = 'single';          // 'gp' | 'single' | 'ta'
@@ -222,6 +229,7 @@
       if (Game.hud && this._hudActive) Game.hud.setVisible(next === 'race' || next === 'pause');
 
       if (next === 'title') this._enterTitle();
+      if (next === 'diffSelect') this._enterDiffSelect();
       if (next === 'charSelect') this._enterCharSelect();
       if (next === 'courseSelect') this._enterCourseSelect();
       if (next === 'result') this._enterResult();
@@ -241,6 +249,7 @@
     _update(dt) {
       switch (this._state) {
         case 'title': this._updateTitleBg(dt); this._navTitle(); break;
+        case 'diffSelect': this._updateTitleBg(dt); this._navDiffSelect(); break;
         case 'charSelect': this._updateTitleBg(dt); this._navCharSelect(); break;
         case 'courseSelect': this._updateTitleBg(dt); this._navCourseSelect(); break;
         case 'race': this._updateRace(dt); break;
@@ -362,6 +371,69 @@
         this.gpPoints = {};
         this.selectedCourseId = SC.gpCourseOrder[0];
       }
+      // タイムアタックはCPUがいないので難易度選択を飛ばす
+      this.setState(it.id === 'ta' ? 'charSelect' : 'diffSelect');
+    },
+
+    // =========================================================
+    // 1.5 CPUの強さ選択
+    // =========================================================
+    _buildDiffSelectLayer() {
+      const layer = el('div', 'layer');
+      const panel = el('div', 'sg-panel');
+      panel.appendChild(el('div', 'sg-heading', 'CPUの強さをえらぼう'));
+      const menu = el('div', 'sg-menu');
+      const items = [
+        { id: 'easy', label: 'やさしい', desc: 'のんびり楽しみたい人に。CPUはひかえめ' },
+        { id: 'normal', label: 'ふつう', desc: 'ちょうどいい接戦が楽しめる' },
+        { id: 'hard', label: 'むずかしい', desc: 'CPUが本気を出す。腕に自信がある人向け' },
+      ];
+      this._diffItems = items;
+      this._diffCursor = 1;
+      items.forEach((it, i) => {
+        const b = el('div', 'sg-btn',
+          `${it.label}<br><span style="font-size:12px;font-weight:600;opacity:.8">${it.desc}</span>`);
+        b.addEventListener('click', () => { this._diffCursor = i; this._confirmDiffSelect(); });
+        b.addEventListener('mouseenter', () => { this._diffCursor = i; this._refreshDiffMenu(); });
+        menu.appendChild(b);
+      });
+      panel.appendChild(menu);
+      const foot = el('div', null);
+      foot.style.textAlign = 'center';
+      foot.style.marginTop = '14px';
+      const backBtn = el('div', 'sg-btn ghost small', 'タイトルへ戻る');
+      backBtn.addEventListener('click', () => this.setState('title'));
+      foot.appendChild(backBtn);
+      panel.appendChild(foot);
+      layer.appendChild(panel);
+      this.root.appendChild(layer);
+      this.layers.diffSelect = layer;
+      this._diffMenuEl = menu;
+    },
+
+    _refreshDiffMenu() {
+      const btns = this._diffMenuEl.children;
+      for (let i = 0; i < btns.length; i++) btns[i].classList.toggle('selected', i === this._diffCursor);
+    },
+
+    _enterDiffSelect() {
+      this._ensureBgScene();
+      const idx = this._diffItems.findIndex((d) => d.id === this.difficulty);
+      this._diffCursor = idx >= 0 ? idx : 1;
+      this._refreshDiffMenu();
+    },
+
+    _navDiffSelect() {
+      const n = this._diffItems.length;
+      if (Game.input.justPressed('ArrowUp', 'KeyW')) { this._diffCursor = (this._diffCursor - 1 + n) % n; this._refreshDiffMenu(); }
+      else if (Game.input.justPressed('ArrowDown', 'KeyS')) { this._diffCursor = (this._diffCursor + 1) % n; this._refreshDiffMenu(); }
+      else if (this._confirmPressed()) this._confirmDiffSelect();
+    },
+
+    _confirmDiffSelect() {
+      this.difficulty = this._diffItems[this._diffCursor].id;
+      Game.difficulty = this.difficulty;
+      try { localStorage.setItem('sugariaGP_diff', this.difficulty); } catch (e) { /* no-op */ }
       this.setState('charSelect');
     },
 
@@ -577,7 +649,10 @@
       charIds.forEach((charId, i) => {
         const cdef = Game.characters.list.find((c) => c.id === charId);
         const isPlayer = i === 0;
-        const kart = new Game.Kart({ isPlayer, color: cdef.color, stats: cdef.stats, charId });
+        const kart = new Game.Kart({
+          isPlayer, color: cdef.color, stats: cdef.stats, charId,
+          number: Game.characters.list.indexOf(cdef) + 1, // ゼッケン=ロスター番号
+        });
         scene.add(kart.buildMesh());
         // buildMesh()でkart.group内に'riderPlaceholder'が生成された後でないと差し替えできない
         Game.characters.mountOn(kart, charId);

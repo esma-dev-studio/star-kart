@@ -60,7 +60,11 @@ Game.AIController = class AIController {
   constructor(kart, opts = {}) {
     this.kart = kart;
     kart.isAI = true;
-    this.skill = opts.skill ?? (AI_SKILL_BASE + Math.random() * AI_SKILL_RANGE);
+    // 難易度プリセット(未設定なら'ふつう')。スキル/ラバーバンド/速度係数に効く
+    const presets = Game.config.ai.difficulty || {};
+    this._diff = presets[Game.difficulty] || presets.normal
+      || { skillBase: AI_SKILL_BASE, skillRange: AI_SKILL_RANGE, maxBoost: 0.13, maxDrag: 0.09, speedFactor: 1.0 };
+    this.skill = opts.skill ?? (this._diff.skillBase + Math.random() * this._diff.skillRange);
     // レコードラインの個体差(半幅比オフセット)
     this.lineOffset = (Math.random() * 2 - 1) * Game.config.ai.lineNoise;
     this._baseLineOffset = this.lineOffset;
@@ -78,12 +82,12 @@ Game.AIController = class AIController {
   getInput(dt, kart, course, race) {
     const A = Game.config.ai, U = Game.U;
 
-    // ラバーバンド: プレイヤーとの距離でmaxSpeedを毎フレーム上書き
+    // ラバーバンド: プレイヤーとの距離でmaxSpeedを毎フレーム上書き(強さは難易度プリセット依存)
     if (race && race.playerKart && typeof race.trackDistance === 'function') {
       const dist = race.trackDistance(race.playerKart, kart); // 正=プレイヤーが前
-      const rb = A.rubberband;
-      const factor = 1 + U.clamp(dist / rb.range, -1, 1) * (dist > 0 ? rb.maxBoost : rb.maxDrag);
-      kart.maxSpeed = kart.baseMaxSpeed * factor * (0.94 + 0.06 * this.skill);
+      const rb = A.rubberband, d = this._diff;
+      const factor = 1 + U.clamp(dist / rb.range, -1, 1) * (dist > 0 ? d.maxBoost : d.maxDrag);
+      kart.maxSpeed = kart.baseMaxSpeed * factor * d.speedFactor * (0.94 + 0.06 * this.skill);
     }
 
     // ゴール後: ドリフトなしでライン追従のみ継続

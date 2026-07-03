@@ -10,6 +10,7 @@ Game.Kart = class Kart {
     this.isPlayer = !!opts.isPlayer;
     this.color = opts.color ?? 0xff8fb0;
     this.charId = opts.charId ?? null;
+    this.number = opts.number ?? 1; // ゼッケン番号
 
     this.maxSpeed = P.maxSpeed * (1 + (st.speed - 3) * SM.speed);
     this.baseMaxSpeed = this.maxSpeed; // AIラバーバンドはmaxSpeedを毎フレーム上書きする
@@ -316,54 +317,102 @@ Game.Kart = class Kart {
     g.add(tilt);
 
     const bodyMat = new THREE.MeshLambertMaterial({ color: this.color });
+    const darker = new THREE.Color(this.color).multiplyScalar(0.72);
+    const accentMat = new THREE.MeshLambertMaterial({ color: darker });
     const darkMat = new THREE.MeshLambertMaterial({ color: 0x3a3a3a });
-    const body = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.5, 2.5), bodyMat);
-    body.position.y = 0.55;
+
+    // 低く構えた流線型シャシー
+    const body = new THREE.Mesh(new THREE.BoxGeometry(1.35, 0.34, 2.3), bodyMat);
+    body.position.y = 0.5;
     tilt.add(body);
-    const nose = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.35, 0.7), bodyMat);
-    nose.position.set(0, 0.5, 1.45);
-    tilt.add(nose);
-    const seatBack = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.6, 0.25), bodyMat);
-    seatBack.position.set(0, 1.0, -0.9);
+    // ウェッジノーズ(前傾)
+    const noseWedge = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.26, 1.05), bodyMat);
+    noseWedge.position.set(0, 0.52, 1.35);
+    noseWedge.rotation.x = 0.12;
+    tilt.add(noseWedge);
+    // サイドポッド
+    for (const sx of [-0.82, 0.82]) {
+      const pod = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.3, 1.3), accentMat);
+      pod.position.set(sx, 0.48, -0.15);
+      tilt.add(pod);
+    }
+    // フロントウィング+翼端板
+    const fWing = new THREE.Mesh(new THREE.BoxGeometry(1.85, 0.07, 0.44), accentMat);
+    fWing.position.set(0, 0.3, 1.78);
+    tilt.add(fWing);
+    for (const sx of [-0.92, 0.92]) {
+      const plate = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.18, 0.44), accentMat);
+      plate.position.set(sx, 0.36, 1.78);
+      tilt.add(plate);
+    }
+    // ゼッケン(ノーズのナンバーサークル)
+    const numCv = document.createElement('canvas');
+    numCv.width = 128; numCv.height = 128;
+    const nx = numCv.getContext('2d');
+    nx.fillStyle = '#ffffff';
+    nx.beginPath(); nx.arc(64, 64, 60, 0, Math.PI * 2); nx.fill();
+    nx.lineWidth = 10;
+    nx.strokeStyle = '#' + darker.getHexString();
+    nx.beginPath(); nx.arc(64, 64, 54, 0, Math.PI * 2); nx.stroke();
+    nx.fillStyle = '#41333b';
+    nx.font = 'bold 64px sans-serif';
+    nx.textAlign = 'center'; nx.textBaseline = 'middle';
+    nx.fillText(String(this.number), 64, 68);
+    const roundel = new THREE.Mesh(new THREE.CircleGeometry(0.3, 20),
+      new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(numCv), transparent: true }));
+    roundel.position.set(0, 0.68, 1.3);
+    roundel.rotation.x = -Math.PI / 2 + 0.12;
+    tilt.add(roundel);
+    // シートとステアリング
+    const seatBack = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.55, 0.22), bodyMat);
+    seatBack.position.set(0, 0.9, -0.85);
     tilt.add(seatBack);
+    const column = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.44, 6), darkMat);
+    column.position.set(0, 0.82, 0.42);
+    column.rotation.x = 0.9;
+    tilt.add(column);
+    const wheelRing = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.045, 8, 14), darkMat);
+    wheelRing.position.set(0, 0.98, 0.3);
+    wheelRing.rotation.x = -0.65;
+    tilt.add(wheelRing);
     // 乗り手プレースホルダ(characters.mountOnでキャラモデルに差し替わる)
     const rider = new THREE.Mesh(new THREE.SphereGeometry(0.55, 14, 12),
       new THREE.MeshLambertMaterial({ color: 0xfff2e8 }));
-    rider.position.set(0, 1.25, -0.25);
+    rider.position.set(0, 0.95, -0.32);
     rider.name = 'riderPlaceholder';
     tilt.add(rider);
 
-    // レーシング装備: リアスポイラー/センターストライプ/ヘッドライト
-    const darker = new THREE.Color(this.color).multiplyScalar(0.72);
-    const spoilerMat = new THREE.MeshLambertMaterial({ color: darker });
-    const wing = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.09, 0.42), spoilerMat);
-    wing.position.set(0, 1.18, -1.3);
+    // リアウィング/センターストライプ/ヘッドライト
+    const wing = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.08, 0.44), accentMat);
+    wing.position.set(0, 1.14, -1.28);
     tilt.add(wing);
-    for (const sx of [-0.55, 0.55]) {
-      const strut = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.34, 0.09), spoilerMat);
-      strut.position.set(sx, 0.98, -1.3);
+    for (const sx of [-0.5, 0.5]) {
+      const strut = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.34, 0.08), accentMat);
+      strut.position.set(sx, 0.93, -1.28);
       tilt.add(strut);
     }
-    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.03, 2.4),
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.03, 2.2),
       new THREE.MeshLambertMaterial({ color: 0xfff6ee }));
-    stripe.position.set(0, 0.815, 0);
+    stripe.position.set(0, 0.685, -0.1);
     tilt.add(stripe);
-    for (const sx of [-0.5, 0.5]) {
-      const light = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 8),
+    for (const sx of [-0.42, 0.42]) {
+      const light = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8),
         new THREE.MeshBasicMaterial({ color: 0xfffbe0 }));
-      light.position.set(sx, 0.56, 1.81);
+      light.position.set(sx, 0.5, 1.85);
       tilt.add(light);
     }
 
+    // ホイール: レーシングカートらしく前細・後太
     this._wheels = [];
-    for (const [x, z, front] of [[-0.95, 0.85, true], [0.95, 0.85, true], [-0.95, -0.9, false], [0.95, -0.9, false]]) {
+    for (const [x, z, front] of [[-0.88, 0.95, true], [0.88, 0.95, true], [-0.92, -0.92, false], [0.92, -0.92, false]]) {
+      const r = front ? 0.34 : 0.46, w = front ? 0.28 : 0.4;
       const pivot = new THREE.Group();
-      pivot.position.set(x, 0.4, z);
+      pivot.position.set(x, r, z);
       const spinner = new THREE.Group();
-      const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.32, 12), darkMat);
+      const wheel = new THREE.Mesh(new THREE.CylinderGeometry(r, r, w, 12), darkMat);
       wheel.rotation.z = Math.PI / 2;
       spinner.add(wheel);
-      const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.36, 8),
+      const hub = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.45, r * 0.45, w + 0.04, 8),
         new THREE.MeshLambertMaterial({ color: 0xffd166 }));
       hub.rotation.z = Math.PI / 2;
       spinner.add(hub);
@@ -374,14 +423,14 @@ Game.Kart = class Kart {
 
     // 排気口とブースト炎
     this._flames = [];
-    for (const x of [-0.45, 0.45]) {
-      const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.14, 0.5, 8), darkMat);
-      pipe.position.set(x, 0.75, -1.35);
+    for (const x of [-0.32, 0.32]) {
+      const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.13, 0.5, 8), darkMat);
+      pipe.position.set(x, 0.62, -1.3);
       pipe.rotation.x = Math.PI / 2.4;
       tilt.add(pipe);
       const flame = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.9, 8),
         new THREE.MeshBasicMaterial({ color: 0xffa030, transparent: true, opacity: 0.9 }));
-      flame.position.set(x, 0.68, -1.9);
+      flame.position.set(x, 0.56, -1.85);
       flame.rotation.x = Math.PI / 2;
       flame.visible = false;
       tilt.add(flame);
@@ -390,10 +439,10 @@ Game.Kart = class Kart {
 
     // ドリフト火花(色は充填レベルで変化)
     this._sparks = [];
-    for (const x of [-0.85, 0.85]) {
+    for (const x of [-0.8, 0.8]) {
       const spark = new THREE.Mesh(new THREE.SphereGeometry(0.17, 8, 8),
         new THREE.MeshBasicMaterial({ color: 0x55c8ff }));
-      spark.position.set(x, 0.25, -1.1);
+      spark.position.set(x, 0.22, -1.15);
       spark.visible = false;
       tilt.add(spark);
       this._sparks.push(spark);

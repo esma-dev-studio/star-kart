@@ -139,6 +139,9 @@ Game.Course = class Course {
     g.add(this.buildStartLine());
     g.add(this.buildGate());
 
+    // 急コーナーの外側にシェブロン看板(コーナー予告+レース感)
+    for (const m of this.buildCornerSigns()) g.add(m);
+
     if (this.def.decorate) this.def.decorate(g, this);
 
     // ミニマップ用外形
@@ -312,6 +315,59 @@ Game.Course = class Course {
     return new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: tex }));
   }
 
+  // 急コーナーを検出し、外側にシェブロン(矢印)看板を並べる
+  buildCornerSigns() {
+    const s = this.spline;
+    const out = [];
+    const SPAN = 8;        // 曲率評価スパン(サンプル数)
+    const THRESH = 0.55;   // この角度変化(rad)以上を「急コーナー」とみなす
+    const postMat = new THREE.MeshLambertMaterial({ color: 0x9a97a8 });
+    let i = 0, placed = 0;
+    while (i < s.count && placed < 6) {
+      const a0 = s.tangentAngle((i - SPAN + s.count) % s.count);
+      const a1 = s.tangentAngle((i + SPAN) % s.count);
+      const k = Game.U.wrapAngle(a1 - a0);
+      const t = i / s.count;
+      if (Math.abs(k) > THRESH && !this.inZone(this.gaps, t) && !this.inZone(this.fallZones, t)) {
+        const outSide = k > 0 ? 1 : -1; // 左コーナー(k>0)の外側=右(lateral正)
+        const mat = new THREE.MeshLambertMaterial({ map: this.chevronTexture(k > 0) });
+        for (let b = -1; b <= 1; b++) {
+          const idx = (i + b * 6 + s.count) % s.count;
+          const p = s.pts[idx], n = s.nrm[idx], w = s.w[idx];
+          const off = (w + this.offroadWidth + 1.4) * outSide;
+          const board = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.5, 0.14), mat);
+          board.position.set(p.x + n.x * off, p.y + 1.2, p.z + n.z * off);
+          board.rotation.y = s.tangentAngle(idx) + Math.PI; // 進行方向に正対させる
+          out.push(board);
+          const post = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 1.0, 6), postMat);
+          post.position.set(board.position.x, p.y + 0.5, board.position.z);
+          out.push(post);
+        }
+        placed++;
+        i += 40; // 同じコーナーへの重複配置を防ぐ
+        continue;
+      }
+      i += 4;
+    }
+    return out;
+  }
+
+  chevronTexture(pointLeft) {
+    const cv = document.createElement('canvas');
+    cv.width = 256; cv.height = 160;
+    const x = cv.getContext('2d');
+    x.fillStyle = '#ff5f8a'; x.fillRect(0, 0, 256, 160);
+    x.strokeStyle = '#ffffff'; x.lineWidth = 18; x.lineJoin = 'miter';
+    for (let a = 0; a < 3; a++) {
+      const cx = 52 + a * 76;
+      x.beginPath();
+      if (pointLeft) { x.moveTo(cx + 22, 28); x.lineTo(cx - 22, 80); x.lineTo(cx + 22, 132); }
+      else { x.moveTo(cx - 22, 28); x.lineTo(cx + 22, 80); x.lineTo(cx - 22, 132); }
+      x.stroke();
+    }
+    return new THREE.CanvasTexture(cv);
+  }
+
   buildStartLine() {
     const s = this.spline;
     const p = s.pts[0], n = s.nrm[0], t = s.tan[0], w = s.w[0];
@@ -339,7 +395,16 @@ Game.Course = class Course {
     const s = this.spline;
     const p = s.pts[2], n = s.nrm[2], w = s.w[2];
     const grp = new THREE.Group();
-    const postMat = new THREE.MeshLambertMaterial({ color: 0xff8fb0 });
+    // 支柱: 白×ピンクのストライプ(レースゲートらしく)
+    const postCv = document.createElement('canvas');
+    postCv.width = 32; postCv.height = 128;
+    const px = postCv.getContext('2d');
+    for (let i = 0; i < 8; i++) {
+      px.fillStyle = i % 2 ? '#ffffff' : '#ff6f91';
+      px.fillRect(0, i * 16, 32, 16);
+    }
+    const postTex = new THREE.CanvasTexture(postCv);
+    const postMat = new THREE.MeshLambertMaterial({ map: postTex });
     for (const side of [-1, 1]) {
       const post = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.6, 7.5, 10), postMat);
       post.position.set(p.x + n.x * side * (w + 1.2), p.y + 3.75, p.z + n.z * side * (w + 1.2));
@@ -349,10 +414,17 @@ Game.Course = class Course {
     cv.width = 512; cv.height = 96;
     const x = cv.getContext('2d');
     x.fillStyle = '#ff8fb0'; x.fillRect(0, 0, 512, 96);
+    // 上下にチェッカー模様の帯
+    for (let i = 0; i < 32; i++) {
+      x.fillStyle = i % 2 ? '#ffffff' : '#41333b';
+      x.fillRect(i * 16, 0, 16, 14);
+      x.fillStyle = i % 2 ? '#41333b' : '#ffffff';
+      x.fillRect(i * 16, 82, 16, 14);
+    }
     x.fillStyle = '#fff6fa';
-    x.font = 'bold 56px sans-serif';
+    x.font = 'bold 50px sans-serif';
     x.textAlign = 'center'; x.textBaseline = 'middle';
-    x.fillText('SUGARIA GP', 256, 50);
+    x.fillText('SUGARIA GP', 256, 48);
     const texMat = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cv) });
     const pinkMat = new THREE.MeshLambertMaterial({ color: 0xff8fb0 });
     const banner = new THREE.Mesh(

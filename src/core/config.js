@@ -86,6 +86,30 @@ Game.config = {
       maxDrag: 0.09,         // 前方時の最大速度ペナルティ
     },
     lineNoise: 0.25,         // レコードラインの個体差(半幅比)
-    rocketStartChance: 0.6,  // CPUのロケットスタート成功率
+    rocketStartChance: 0.6,  // CPUのロケットスタート成功率(difficulty未設定時のフォールバック)
+    // 難易度プリセット(Game.difficulty = 'easy'|'normal'|'hard' で選択)
+    difficulty: {
+      easy: {
+        label: 'やさしい',
+        skillBase: 0.40, skillRange: 0.25,   // AIの基礎スキル
+        maxBoost: 0.04, maxDrag: 0.18,       // ラバーバンド(後方時ボーナス/前方時ペナルティ)
+        speedFactor: 0.85,                   // CPU全体の速度係数
+        rocketStart: 0.30,
+      },
+      normal: {
+        label: 'ふつう',
+        skillBase: 0.65, skillRange: 0.30,
+        maxBoost: 0.13, maxDrag: 0.09,
+        speedFactor: 1.0,
+        rocketStart: 0.60,
+      },
+      hard: {
+        label: 'むずかしい',
+        skillBase: 0.85, skillRange: 0.15,
+        maxBoost: 0.18, maxDrag: 0.04,
+        speedFactor: 1.08,
+        rocketStart: 0.90,
+      },
+    },
   },
 };
