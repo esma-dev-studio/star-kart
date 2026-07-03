@@ -29,8 +29,11 @@ Game.Kart = class Kart {
     this.boostT = 0;
     this.spinT = 0;
     this.lockT = 0;       // リスポーン直後の操作ロック
-    this.starT = 0;       // 無敵(Phase3で使用)
-    this.shield = false;  // 防御(Phase3で使用)
+    this.starT = 0;       // 無敵(スターゼリー)
+    this.shield = false;  // 防御(クッキーシールド)
+    this.autoT = 0;       // 自動走行(レインボースプリンクル)
+    this.slowT = 0;       // 減速デバフ(キャラメルトラップ等)
+    this.items = [];      // 所持アイテムキュー(idの配列)
 
     this.progressHint = null;
     this.lastQuery = null;
@@ -48,14 +51,14 @@ Game.Kart = class Kart {
   // ---- 状態変更API(アイテム等から呼ばれる) ----
   applyBoost(duration) { this.boostT = Math.max(this.boostT, duration); }
   applySpin() {
-    if (this.starT > 0 || this.spinT > 0) return;
+    if (this.starT > 0 || this.autoT > 0 || this.spinT > 0) return;
     if (this.shield) { this.shield = false; if (this.onShieldBreak) this.onShieldBreak(); return; }
     this.spinT = Game.config.physics.spinDuration;
     this.cancelDrift(false);
     if (this.onSpin) this.onSpin();
   }
   applyHit(power = 1) { // 爆発など強めの被弾
-    if (this.starT > 0) return;
+    if (this.starT > 0 || this.autoT > 0) return;
     if (this.shield) { this.shield = false; if (this.onShieldBreak) this.onShieldBreak(); return; }
     this.spinT = Game.config.physics.spinDuration * 1.3;
     this.speed *= 0.2;
@@ -87,6 +90,8 @@ Game.Kart = class Kart {
     this.progressHint = hint;
     this.cancelDrift(false);
     this.boostT = 0; this.spinT = 0;
+    this.autoT = 0; this.slowT = 0;
+    this.items = []; this.shield = false; this.starT = 0;
   }
 
   respawn(course) {
@@ -108,6 +113,8 @@ Game.Kart = class Kart {
     if (this.spinT > 0) this.spinT -= dt;
     if (this.lockT > 0) this.lockT -= dt;
     if (this.starT > 0) this.starT -= dt;
+    if (this.autoT > 0) this.autoT -= dt;
+    if (this.slowT > 0) this.slowT -= dt;
 
     const q = course.query(this.pos, this.progressHint);
     this.progressHint = q.idx;
@@ -117,8 +124,10 @@ Game.Kart = class Kart {
 
     // --- 速度上限と加減速 ---
     let cap = this.maxSpeed;
-    if (this.boostT > 0 || this.starT > 0) cap *= P.boostMultiplier;
+    if (this.autoT > 0) cap *= P.boostMultiplier * 1.12;
+    else if (this.boostT > 0 || this.starT > 0) cap *= P.boostMultiplier;
     else if (offroad) cap *= P.offroadMultiplier;
+    if (this.slowT > 0) cap *= P.itemSlowFactor;
     if (this.spinT > 0) cap *= 0.3;
 
     const th = this.spinT > 0 ? 0 : input.throttle;

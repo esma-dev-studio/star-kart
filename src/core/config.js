@@ -29,6 +29,7 @@ Game.config = {
     padBoostTime: 0.9,       // ブーストパッドの効果時間
     offroadMultiplier: 0.5,  // コース外の速度上限倍率
     spinDuration: 1.1,       // 被弾スピン時間
+    itemSlowFactor: 0.5,     // トラップ等のslowT中の速度上限倍率
     wallRestitution: 0.35,   // 壁に深い角度で当たった時に残る速度割合
     kartRadius: 1.5,         // カート同士の衝突半径
     jumpImpulse: 7.5,        // ジャンプ台の上向き初速
@@ -50,6 +51,29 @@ Game.config = {
     weightStep: 0.25,        // 質量 = 1 + (weight-3)*この値
   },
   race: { laps: 3, kartCount: 8, countdownSec: 3 },
+  items: {
+    boxRespawnSec: 4,
+    rouletteSec: 1.1,        // アイテムルーレット演出時間
+    pickupRadius: 2.2,
+    maxQueue: 3,             // ミラクルパフェで最大3連キュー
+    // 順位帯別の抽選重み(maxRank以下の順位に適用、上から順に判定)
+    lottery: [
+      { maxRank: 2, weights: { honey: 40, scone: 25, caramel: 20, shield: 10, lemon: 5 } },
+      { maxRank: 5, weights: { honey: 20, scone: 15, caramel: 10, marshmallow: 15, shield: 15, lemon: 10, soda: 5, star: 5, parfait: 5 } },
+      { maxRank: 8, weights: { honey: 10, marshmallow: 10, shield: 10, star: 15, soda: 15, rainbow: 25, parfait: 15 } },
+    ],
+    params: {
+      honeyBoostSec: 1.5,
+      sconeSpeed: 55, sconeLifeSec: 2.5, projectileRadius: 1.4,
+      caramelLifeSec: 40, caramelSlowSec: 2.0, maxTraps: 14,
+      marshmallowSpeed: 42, marshmallowTurn: 2.4, marshmallowLifeSec: 7,
+      lemonThrowSpeed: 32, lemonFuseSec: 2.5, lemonBlastRadius: 6,
+      starSec: 6,
+      sodaSlowSec: 1.5,
+      rainbowSec: 7,
+      parfaitPool: ['honey', 'marshmallow', 'star', 'soda'],
+    },
+  },
   ai: {
     lookAheadBase: 10,       // 先読みサンプル数(基礎)
     lookAheadSpeed: 0.55,    // +速度×この係数

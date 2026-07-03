@@ -227,10 +227,14 @@ Game.AIController = class AIController {
       this._drifting = false;
     }
 
+    // アイテム使用判断はアイテムシステム側のロジックに委ねる(クールダウン等も向こうで管理)
+    const itemPressed = !!(Game.items && Game.items.aiWantsToUse
+      && kart.items.length > 0 && Game.items.aiWantsToUse(kart, race, dt));
+
     return {
       throttle, brake, steer,
       drift, driftPressed,
-      itemPressed: false,
+      itemPressed,
       pausePressed: false,
     };
   }

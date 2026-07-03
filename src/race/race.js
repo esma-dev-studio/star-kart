@@ -214,10 +214,17 @@
 
       const karts = this.entries.map((e) => e.kart);
       for (const e of this.entries) {
-        const input = e.controller.getInput(dt, e.kart, this.course, this);
+        let input = e.controller.getInput(dt, e.kart, this.course, this);
+        // レインボースプリンクル(自動走行)中はアイテムシステムが入力を乗っ取る
+        if (Game.items && e.kart.autoT > 0) {
+          const ov = Game.items.autoInput(dt, e.kart, this.course, this);
+          if (ov) input = ov;
+        }
+        if (input.itemPressed && Game.items) Game.items.use(e.kart, this);
         e.kart.update(dt, input, this.course);
       }
       Game.Kart.collide(karts);
+      if (Game.items) Game.items.update(dt, this);
 
       for (const e of this.entries) this._trackLap(e.kart);
       this._updateRanks();
