@@ -72,10 +72,12 @@ Game.Course = class Course {
 
   respawnPoint(progress) {
     const s = this.spline;
-    let t = progress;
-    // 落下区間内なら、その手前に戻す
-    const zone = this.inZone(this.gaps, t) || this.inZone(this.fallZones, t);
-    if (zone) t = (zone.t0 - 0.015 + 1) % 1;
+    // 少しだけ手前の路面上に戻す。fallZoneは縁の外に落ちるだけで路面自体は存在するので
+    // 進行度は保持する(ゾーン先頭まで巻き戻すと落下のたびに大幅後退が蓄積してしまう)。
+    let t = (progress - 4 / s.count + 1) % 1;
+    // ギャップ(路面が無い区間)だけはその手前へ
+    const gap = this.inZone(this.gaps, t);
+    if (gap) t = (gap.t0 - 0.01 + 1) % 1;
     const idx = Math.floor(t * s.count) % s.count;
     return {
       pos: s.pts[idx].clone().add(new THREE.Vector3(0, 0.2, 0)),

@@ -32,6 +32,8 @@ Game.config = {
     wallRestitution: 0.35,   // 壁に深い角度で当たった時に残る速度割合
     kartRadius: 1.5,         // カート同士の衝突半径
     jumpImpulse: 7.5,        // ジャンプ台の上向き初速
+    jumpPadMinSpeed: 22,     // ジャンプ台の最低射出速度(低速で踏んでもギャップを飛べる保証)
+    padFlightCenter: 1.6,    // ジャンプ台飛行中に路面中央へ吸い寄せる強さ(/s)。着地失敗の救済
     fallRespawnDepth: 12,    // 路面からこれだけ落ちたらリスポーン
     respawnLockTime: 0.9,    // リスポーン後の操作ロック
   },

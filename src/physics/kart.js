@@ -83,6 +83,7 @@ Game.Kart = class Kart {
     this.velAngle = heading;
     this.speed = 0; this.vy = 0;
     this.grounded = true;
+    this._padFlight = false;
     this.progressHint = hint;
     this.cancelDrift(false);
     this.boostT = 0; this.spinT = 0;
@@ -200,11 +201,18 @@ Game.Kart = class Kart {
     if (!this.grounded) {
       this.vy -= P.gravity * dt;
       this.pos.y += this.vy * dt;
+      // ジャンプ台からの飛行中は路面中央へ緩やかに吸い寄せる(狭い足場への着地救済)
+      if (this._padFlight) {
+        const pull = Math.min(1, P.padFlightCenter * dt);
+        this.pos.x -= q2.normal.x * q2.lateral * pull;
+        this.pos.z -= q2.normal.z * q2.lateral * pull;
+      }
       // 深く沈み込んでいる時は吸着着地させない(ギャップ落下中に路面へワープするのを防ぐ)
       if (q2.ground && this.vy <= 0 && this.pos.y <= q2.roadY && this.pos.y >= q2.roadY - 2) {
         this.pos.y = q2.roadY;
         this.vy = 0;
         this.grounded = true;
+        this._padFlight = false;
         // 着地: ホップ中にドリフト成立判定
         if (d.state === 'hop') {
           const dir = d.dir !== 0 ? d.dir : Math.sign(steer);
@@ -245,7 +253,9 @@ Game.Kart = class Kart {
         if (this.onPadBoost && !this._onPad) this.onPadBoost();
       } else if (q2.pad.type === 'jump' && this.vy <= 0) {
         this.vy = q2.pad.impulse;
+        this.speed = Math.max(this.speed, P.jumpPadMinSpeed); // 低速進入でもギャップを渡り切れる
         this.grounded = false;
+        this._padFlight = true; // 飛行中はセンタリング補正が効く
         if (this.onJumpPad) this.onJumpPad();
       }
       this._onPad = true;
