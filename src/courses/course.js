@@ -1,0 +1,289 @@
+// コース基盤クラス。
+// コース定義(def)の形式:
+// {
+//   name, controlPoints: [{x,y,z,w?}],   // wは路面半幅
+//   offroadWidth?,                        // 路肩(減速地帯)の幅
+//   colors: { sky, fog?, ground, road, edge, offroad },
+//   boostPads?: [{t0,t1,l0?,l1?}],        // t=進行度0..1, l=-1..1(半幅比)
+//   jumpPads?:  [{t0,t1,l0?,l1?,impulse?}],
+//   gaps?:      [{t0,t1}],                // 路面が存在しない区間(浮遊足場の切れ目)
+//   fallZones?: [{t0,t1}],                // 路肩が無く縁から落下する区間
+//   decorate?(group, course)              // テーマ装飾の追加フック
+// }
+Game.Course = class Course {
+  constructor(def) {
+    this.def = def;
+    this.name = def.name;
+    this.spline = new Game.Spline(def.controlPoints, def.samples || 512);
+    this.offroadWidth = def.offroadWidth ?? 6;
+    this.gaps = def.gaps || [];
+    this.fallZones = def.fallZones || [];
+    this.pads = [];
+    for (const p of (def.boostPads || [])) this.pads.push({ type: 'boost', l0: -1, l1: 1, ...p });
+    for (const p of (def.jumpPads || [])) this.pads.push({ type: 'jump', impulse: Game.config.physics.jumpImpulse, l0: -1, l1: 1, ...p });
+    this.group = null;
+    this.minimap = null;
+  }
+
+  static inRange(z, t) { return z.t0 <= z.t1 ? (t >= z.t0 && t <= z.t1) : (t >= z.t0 || t <= z.t1); }
+  inZone(zones, t) {
+    for (const z of zones) if (Course.inRange(z, t)) return z;
+    return null;
+  }
+  padAt(t, latRatio) {
+    for (const p of this.pads) {
+      if (Course.inRange(p, t) && latRatio >= p.l0 && latRatio <= p.l1) return p;
+    }
+    return null;
+  }
+
+  // 路面クエリ。kartは前回のidxをhintとして渡し続けること(立体交差対策)。
+  query(pos, hint = null) {
+    const s = this.spline;
+    const idx = s.closest(pos, hint);
+    const p = s.pts[idx], tan = s.tan[idx], nrm = s.nrm[idx];
+    const lateral = (pos.x - p.x) * nrm.x + (pos.z - p.z) * nrm.z;
+    const halfWidth = s.w[idx];
+    const progress = s.progress(idx);
+    const inGap = this.inZone(this.gaps, progress);
+    const inFall = this.inZone(this.fallZones, progress);
+    const abs = Math.abs(lateral);
+
+    let surface = 'road', ground = true, wall = true;
+    let limit = halfWidth + this.offroadWidth;
+    let pad = null;
+    if (abs <= halfWidth) {
+      if (inGap) { surface = 'gap'; ground = false; wall = false; }
+      else {
+        pad = this.padAt(progress, lateral / halfWidth);
+        surface = pad ? pad.type : 'road';
+      }
+    } else if (inGap || inFall) {
+      surface = 'fall'; ground = false; wall = false; limit = halfWidth;
+    } else {
+      surface = 'offroad';
+    }
+    return {
+      idx, progress, point: p, tangent: tan, normal: nrm,
+      roadY: p.y, lateral, halfWidth, limit, surface, ground, wall, pad,
+      tangentAngle: s.tangentAngle(idx),
+    };
+  }
+
+  respawnPoint(progress) {
+    const s = this.spline;
+    let t = progress;
+    // 落下区間内なら、その手前に戻す
+    const zone = this.inZone(this.gaps, t) || this.inZone(this.fallZones, t);
+    if (zone) t = (zone.t0 - 0.015 + 1) % 1;
+    const idx = Math.floor(t * s.count) % s.count;
+    return {
+      pos: s.pts[idx].clone().add(new THREE.Vector3(0, 0.2, 0)),
+      heading: s.tangentAngle(idx),
+      hint: idx,
+    };
+  }
+
+  startPositions(n) {
+    const s = this.spline;
+    const out = [];
+    for (let k = 0; k < n; k++) {
+      const row = Math.floor(k / 2), side = k % 2;
+      const idx = (s.count - (10 + row * 8)) % s.count;
+      const p = s.pts[idx], nrm = s.nrm[idx];
+      const lat = (side === 0 ? -0.42 : 0.42) * s.w[idx];
+      out.push({
+        pos: new THREE.Vector3(p.x + nrm.x * lat, p.y, p.z + nrm.z * lat),
+        heading: s.tangentAngle(idx),
+        hint: idx,
+      });
+    }
+    return out;
+  }
+
+  // ---- メッシュ生成 ----
+
+  build(scene) {
+    const g = new THREE.Group();
+    const s = this.spline, c = this.def.colors;
+    const U = Game.U;
+
+    scene.background = new THREE.Color(c.sky);
+    scene.fog = new THREE.FogExp2(c.fog ?? c.sky, this.def.fogDensity ?? 0.0038);
+
+    // 地面(最低い路面より下に敷く)
+    let minY = Infinity;
+    for (const p of s.pts) minY = Math.min(minY, p.y);
+    const ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(2400, 2400),
+      new THREE.MeshLambertMaterial({ color: c.ground })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = minY - 1.6;
+    g.add(ground);
+
+    // 路面 + 路肩
+    g.add(this.buildStrip(-1, 1, this.roadTexture(c), 0, (t) => !this.inZone(this.gaps, t)));
+    const offMat = new THREE.MeshLambertMaterial({ color: c.offroad });
+    const skirtOk = (t) => !this.inZone(this.gaps, t) && !this.inZone(this.fallZones, t);
+    g.add(this.buildStrip(1, 1 + this.offroadWidth / 7, offMat, -0.02, skirtOk, true));
+    g.add(this.buildStrip(-1 - this.offroadWidth / 7, -1, offMat, -0.02, skirtOk, true));
+
+    // ブースト/ジャンプパッド
+    for (const p of this.pads) g.add(this.buildPadMesh(p));
+
+    // スタートライン(チェッカー)とゲート
+    g.add(this.buildStartLine());
+    g.add(this.buildGate());
+
+    if (this.def.decorate) this.def.decorate(g, this);
+
+    // ミニマップ用外形
+    const mm = [];
+    for (let i = 0; i < s.count; i += 4) mm.push({ x: s.pts[i].x, z: s.pts[i].z });
+    this.minimap = mm;
+
+    this.group = g;
+    scene.add(g);
+    return g;
+  }
+
+  // 中心線から l0..l1 (半幅比、offroadは比を拡張) の帯メッシュを作る
+  buildStrip(r0, r1, matOrTex, yOff, includeFn, isSkirt = false) {
+    const s = this.spline;
+    const pos = [], uv = [], idxArr = [];
+    let vi = 0;
+    for (let i = 0; i < s.count; i++) {
+      const j = (i + 1) % s.count;
+      const tMid = ((i + 0.5) / s.count) % 1;
+      if (includeFn && !includeFn(tMid)) continue;
+      const add = (k, r) => {
+        const p = s.pts[k], n = s.nrm[k], w = s.w[k];
+        // 路肩は半幅+固定幅で計算する(比だと幅がコース幅に比例してしまう)
+        const off = isSkirt
+          ? Math.sign(r) * (w + (Math.abs(r) - 1) * 7)
+          : r * w;
+        pos.push(p.x + n.x * off, p.y + yOff, p.z + n.z * off);
+      };
+      add(i, r0); add(i, r1); add(j, r0); add(j, r1);
+      const v0 = (i / s.count) * s.total / 6, v1 = ((i + 1) / s.count) * s.total / 6;
+      uv.push(0, v0, 1, v0, 0, v1, 1, v1);
+      idxArr.push(vi, vi + 2, vi + 1, vi + 1, vi + 2, vi + 3);
+      vi += 4;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    geo.setIndex(idxArr);
+    geo.computeVertexNormals();
+    const mat = matOrTex.isMaterial ? matOrTex : new THREE.MeshLambertMaterial({ map: matOrTex });
+    return new THREE.Mesh(geo, mat);
+  }
+
+  roadTexture(c) {
+    const cv = document.createElement('canvas');
+    cv.width = 128; cv.height = 128;
+    const x = cv.getContext('2d');
+    x.fillStyle = c.road; x.fillRect(0, 0, 128, 128);
+    // うっすら明暗ノイズ
+    for (let i = 0; i < 90; i++) {
+      x.fillStyle = 'rgba(255,255,255,0.045)';
+      x.fillRect((i * 37) % 128, (i * 53) % 128, 10, 10);
+    }
+    x.fillStyle = c.edge;
+    x.fillRect(0, 0, 7, 128); x.fillRect(121, 0, 7, 128);
+    const tex = new THREE.CanvasTexture(cv);
+    tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping;
+    return tex;
+  }
+
+  buildPadMesh(p) {
+    const s = this.spline;
+    const pos = [], uv = [], idxArr = [];
+    let vi = 0;
+    const i0 = Math.floor(p.t0 * s.count), i1 = Math.floor(p.t1 * s.count);
+    const n = (i1 - i0 + s.count) % s.count;
+    for (let k = 0; k <= n; k++) {
+      const i = (i0 + k) % s.count;
+      const pt = s.pts[i], nr = s.nrm[i], w = s.w[i];
+      const a = p.l0 * w, b = p.l1 * w;
+      pos.push(pt.x + nr.x * a, pt.y + 0.07, pt.z + nr.z * a);
+      pos.push(pt.x + nr.x * b, pt.y + 0.07, pt.z + nr.z * b);
+      uv.push(0, k / 2, 1, k / 2);
+      if (k < n) { idxArr.push(vi, vi + 2, vi + 1, vi + 1, vi + 2, vi + 3); }
+      vi += 2;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    geo.setIndex(idxArr);
+    const cv = document.createElement('canvas');
+    cv.width = 64; cv.height = 64;
+    const x = cv.getContext('2d');
+    if (p.type === 'boost') {
+      x.fillStyle = '#28d9e8'; x.fillRect(0, 0, 64, 64);
+      x.fillStyle = '#eafffe';
+      x.beginPath(); x.moveTo(8, 12); x.lineTo(32, 34); x.lineTo(56, 12);
+      x.lineTo(56, 26); x.lineTo(32, 50); x.lineTo(8, 26); x.closePath(); x.fill();
+    } else {
+      x.fillStyle = '#ff9d3c'; x.fillRect(0, 0, 64, 64);
+      x.fillStyle = '#ffe6c2'; x.fillRect(0, 24, 64, 16);
+    }
+    const tex = new THREE.CanvasTexture(cv);
+    tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping;
+    return new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: tex }));
+  }
+
+  buildStartLine() {
+    const s = this.spline;
+    const p = s.pts[0], n = s.nrm[0], t = s.tan[0], w = s.w[0];
+    const cv = document.createElement('canvas');
+    cv.width = 128; cv.height = 32;
+    const x = cv.getContext('2d');
+    for (let i = 0; i < 8; i++) for (let j = 0; j < 2; j++) {
+      x.fillStyle = (i + j) % 2 ? '#faf7f0' : '#453b33';
+      x.fillRect(i * 16, j * 16, 16, 16);
+    }
+    const tex = new THREE.CanvasTexture(cv);
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(w * 2, 3),
+      new THREE.MeshBasicMaterial({ map: tex })
+    );
+    // ヨー角φでローカルX軸は(cosφ,0,-sinφ)を向く → 法線nに合わせるにはφ=atan2(-nz,nx)
+    mesh.rotation.order = 'YXZ';
+    mesh.rotation.y = Math.atan2(-n.z, n.x);
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.set(p.x, p.y + 0.08, p.z);
+    return mesh;
+  }
+
+  buildGate() {
+    const s = this.spline;
+    const p = s.pts[2], n = s.nrm[2], w = s.w[2];
+    const grp = new THREE.Group();
+    const postMat = new THREE.MeshLambertMaterial({ color: 0xff8fb0 });
+    for (const side of [-1, 1]) {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.6, 7.5, 10), postMat);
+      post.position.set(p.x + n.x * side * (w + 1.2), p.y + 3.75, p.z + n.z * side * (w + 1.2));
+      grp.add(post);
+    }
+    const cv = document.createElement('canvas');
+    cv.width = 512; cv.height = 96;
+    const x = cv.getContext('2d');
+    x.fillStyle = '#ff8fb0'; x.fillRect(0, 0, 512, 96);
+    x.fillStyle = '#fff6fa';
+    x.font = 'bold 56px sans-serif';
+    x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillText('SUGARIA GP', 256, 50);
+    const texMat = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cv) });
+    const pinkMat = new THREE.MeshLambertMaterial({ color: 0xff8fb0 });
+    const banner = new THREE.Mesh(
+      new THREE.BoxGeometry(w * 2 + 4.5, 1.8, 0.5),
+      [pinkMat, pinkMat, pinkMat, pinkMat, texMat, texMat]
+    );
+    banner.position.set(p.x, p.y + 6.8, p.z);
+    banner.rotation.y = Math.atan2(-n.z, n.x);
+    grp.add(banner);
+    return grp;
+  }
+};
