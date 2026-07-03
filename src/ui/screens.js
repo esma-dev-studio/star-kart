@@ -707,9 +707,23 @@
         Game.audio.playBgm(def.id);
       }
       const prevTick = race.onCountdownTick;
-      race.onCountdownTick = (n) => { if (prevTick) prevTick(n); if (Game.audio) Game.audio.sfx('countBeep'); };
+      race.onCountdownTick = (n) => {
+        if (prevTick) prevTick(n);
+        if (Game.audio) Game.audio.sfx('countBeep');
+        if (course.setStartSignal) course.setStartSignal(n);
+      };
       const prevGo = race.onGo;
-      race.onGo = () => { if (prevGo) prevGo(); if (Game.audio) Game.audio.sfx('countGo'); };
+      race.onGo = () => {
+        if (prevGo) prevGo();
+        if (Game.audio) Game.audio.sfx('countGo');
+        if (course.setStartSignal) course.setStartSignal(0);
+      };
+
+      // プレイヤーの被弾・衝突・着地でカメラを揺らす(臨場感)
+      for (const [ev, mag] of [['onSpin', 0.5], ['onWallHit', 0.3], ['onBump', 0.2], ['onJumpPad', 0.15]]) {
+        const prevCb = playerKart[ev];
+        playerKart[ev] = (...a) => { if (prevCb) prevCb(...a); cam.addShake(mag); };
+      }
       const prevLap = race.onLapChange;
       race.onLapChange = (kart, lap) => {
         if (prevLap) prevLap(kart, lap);
@@ -796,7 +810,15 @@
         ctx.race.update(dt);
         ctx.elapsed += dt;
         if (ctx.course.def.animate && ctx.course.group) ctx.course.def.animate(ctx.elapsed, ctx.course.group);
-        ctx.cam.update(dt, ctx.playerKart);
+        // カメラ: カウントダウン中はスタート演出、ゴール後はオービット、通常は追従
+        if (ctx.race.phase === 'countdown') {
+          const total = Game.config.race.countdownSec || 3;
+          ctx.cam.startSweep(ctx.playerKart, 1 - Math.max(0, ctx.race.countdownT) / total);
+        } else if (ctx.ended && ctx.playerKart.finished) {
+          ctx.cam.victoryOrbit(ctx.playerKart, dt);
+        } else {
+          ctx.cam.update(dt, ctx.playerKart);
+        }
         Game.app.updateSun(ctx.playerKart.pos); // 影のカバー範囲をプレイヤーに追従
         if (Game.fx) Game.fx.update(dt);
         if (Game.audio) Game.audio.update(dt, ctx.playerKart);

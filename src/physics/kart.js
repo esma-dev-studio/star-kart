@@ -312,6 +312,11 @@ Game.Kart = class Kart {
 
   // ---- 見た目 ----
   buildMesh() {
+    // 外装モジュール(kart_style.js)があればそちらに委譲する。
+    // 契約: this.group/_tilt/_wheels[{pivot,spinner,front}]/_flames/_sparks/_shadow を設定し、
+    // 'riderPlaceholder' という名前のノードを座席位置に置いて groupを返すこと
+    if (Game.kartStyle && Game.kartStyle.buildMesh) return Game.kartStyle.buildMesh(this);
+
     const g = new THREE.Group();
     const tilt = new THREE.Group();
     g.add(tilt);
@@ -516,5 +521,8 @@ Game.Kart = class Kart {
 
     // リスポーン直後は点滅
     this.group.visible = this.lockT > 0 ? (Math.floor(this.lockT * 12) % 2 === 0) : true;
+
+    // キャラクターの走行アニメーション(表情/体の傾き等はcharacters側が担当)
+    if (Game.characters && Game.characters.animate) Game.characters.animate(this, dt, steer);
   }
 };

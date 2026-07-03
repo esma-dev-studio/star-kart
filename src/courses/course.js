@@ -112,6 +112,25 @@ Game.Course = class Course {
 
     scene.background = new THREE.Color(c.sky);
     scene.fog = new THREE.FogExp2(c.fog ?? c.sky, this.def.fogDensity ?? 0.0038);
+
+    // コースごとの時間帯/光の色調(def.lighting)。昼・夕方・幻想など空気を変える
+    const L = this.def.lighting;
+    if (L && Game.app) {
+      if (Game.app.hemi) {
+        if (L.hemiSky != null) Game.app.hemi.color.setHex(L.hemiSky);
+        if (L.hemiGround != null) Game.app.hemi.groundColor.setHex(L.hemiGround);
+        if (L.hemiIntensity != null) Game.app.hemi.intensity = L.hemiIntensity;
+      }
+      if (Game.app.sun) {
+        if (L.sunColor != null) Game.app.sun.color.setHex(L.sunColor);
+        if (L.sunIntensity != null) Game.app.sun.intensity = L.sunIntensity;
+      }
+      if (Game.app.rim && L.rimColor != null) Game.app.rim.color.setHex(L.rimColor);
+      if (Game.app.renderer && L.exposure != null) Game.app.renderer.toneMappingExposure = L.exposure;
+    } else if (Game.app && Game.app.renderer) {
+      Game.app.renderer.toneMappingExposure = 1.15; // デフォルトに戻す
+    }
+
     const dome = this.buildSkyDome(c);
     g.add(dome);
     const clouds = this.def.clouds === false ? null : this.buildClouds();
@@ -448,6 +467,15 @@ Game.Course = class Course {
     return new THREE.CanvasTexture(cv);
   }
 
+  // カウントダウン連動のシグナル制御。n=3/2/1(赤が1つずつ増える)、n=0(GO、全灯グリーン)
+  setStartSignal(n) {
+    if (!this._signalLights) return;
+    this._signalLights.forEach((lamp, i) => {
+      if (n === 0) lamp.material = this._sigGreen;
+      else lamp.material = i < (4 - n) ? this._sigRed : this._sigOff;
+    });
+  }
+
   buildStartLine() {
     const s = this.spline;
     const p = s.pts[0], n = s.nrm[0], t = s.tan[0], w = s.w[0];
@@ -514,6 +542,26 @@ Game.Course = class Course {
     banner.position.set(p.x, p.y + 6.8, p.z);
     banner.rotation.y = Math.atan2(-n.z, n.x);
     grp.add(banner);
+
+    // スタートシグナル(3灯): カウントダウンで赤が増え、GOで全灯グリーン
+    this._sigOff = Game.mats ? Game.mats.matte(0x3a2a35) : new THREE.MeshLambertMaterial({ color: 0x3a2a35 });
+    this._sigRed = Game.mats ? Game.mats.glow(0xff3355, 1.8) : new THREE.MeshBasicMaterial({ color: 0xff3355 });
+    this._sigGreen = Game.mats ? Game.mats.glow(0x54ff7a, 1.8) : new THREE.MeshBasicMaterial({ color: 0x54ff7a });
+    this._signalLights = [];
+    const sigGeo = new THREE.SphereGeometry(0.34, 12, 10);
+    const housing = new THREE.Mesh(
+      new THREE.BoxGeometry(4.2, 1.0, 0.6),
+      Game.mats ? Game.mats.matte(0x2c2430) : new THREE.MeshLambertMaterial({ color: 0x2c2430 })
+    );
+    housing.position.set(p.x, p.y + 5.55, p.z);
+    housing.rotation.y = Math.atan2(-n.z, n.x);
+    grp.add(housing);
+    for (let i = -1; i <= 1; i++) {
+      const lamp = new THREE.Mesh(sigGeo, this._sigOff);
+      lamp.position.set(p.x + n.x * i * 1.25, p.y + 5.55, p.z + n.z * i * 1.25);
+      grp.add(lamp);
+      this._signalLights.push(lamp);
+    }
     return grp;
   }
 };

@@ -59,6 +59,35 @@
     ['#ffe38a', '#ffffff'],
   ];
 
+  // 幻想的な昼のまま、リムライトをピンク系にする程度の軽い調整(DESIGN指示準拠)
+  const lighting = {
+    rimColor: 0xff9fd0,
+  };
+
+  // ---- Phase6: 密度・照明強化(観客席/旗/看板/ランドマーク/発光クリスタル) ----
+  const P6 = {
+    standCount: 2,                // 幅の広い区間(スタート付近+着地後)に観客席
+    standRows: 3,
+    standSeatsPerRow: 11,
+    standWidth: 11,
+    standRowDepth: 1.25,
+    standRowHeight: 1.0,
+    standSwaySpeed: 1.7,
+    standSwayAmp: 0.05,
+    bannerSpots: [
+      { t: 0.03, side: 1, text: 'SUGARIA GP' },
+      { t: 0.46, side: -1, text: 'Soda Splash Racing' },
+      { t: 0.94, side: 1, text: 'SKY CASTLE CUP' },
+    ],
+    noboriSpots: [0.12, 0.55, 0.83],
+    crystalCount: 10,             // 光るクリスタルキャンディ(路肩に点在)
+    crystalGlowSpeed: 0.8,
+    castleSilhouetteDist: 260,    // 遠景の飴細工の城シルエット距離
+    castleSilhouetteHeight: 95,
+    ringRadius: 34,               // 回転する虹のリング(城の上に浮かべる)
+    ringSpinSpeed: 0.12,
+  };
+
   function itemSpots() {
     const spots = [];
     for (const t of ITEM_SPOT_GROUPS) {
@@ -83,25 +112,27 @@
     return tex;
   }
 
-  // 飴細工の塔(円柱+円錐、ストライプ)
+  // 飴細工の塔(円柱+円錐、ストライプ)。ガラス質のtranslucent感でプレミアム感を出す
   function buildCandyTower(colorPair, height, radius) {
     const g = new THREE.Group();
     const tex = stripeTexture(colorPair[0], colorPair[1]);
-    const bodyMat = new THREE.MeshLambertMaterial({ map: tex });
+    const bodyMat = new THREE.MeshStandardMaterial({
+      map: tex, roughness: 0.18, metalness: 0.05, transparent: true, opacity: 0.92,
+    });
     const body = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius * 1.1, height, 10), bodyMat);
     body.position.y = height / 2;
     g.add(body);
-    const capMat = new THREE.MeshLambertMaterial({ color: colorPair[0] });
+    const capMat = Game.mats.glass(colorPair[0], 0.85);
     const cap = new THREE.Mesh(new THREE.ConeGeometry(radius * 1.3, height * 0.35, 10), capMat);
     cap.position.y = height + (height * 0.35) / 2;
     g.add(cap);
     return g;
   }
 
-  // 浮かぶ金平糖(球+丸い突起、控えめな数で可愛く)
+  // 浮かぶ金平糖(球+丸い突起、控えめな数で可愛く)。光沢のあるペイント質感
   function buildCandyBall(color, radius) {
     const g = new THREE.Group();
-    const mat = new THREE.MeshLambertMaterial({ color });
+    const mat = Game.mats.paint(color);
     const core = new THREE.Mesh(new THREE.SphereGeometry(radius, 10, 8), mat);
     g.add(core);
     const bumpCount = DECO.candyBumpCount;
@@ -121,7 +152,7 @@
   // 雲(白い球の集合、控えめな数)
   function buildCloud(scale) {
     const g = new THREE.Group();
-    const mat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+    const mat = Game.mats.matte(0xffffff);
     const puffs = [
       [0, 0, 0, 1.0], [0.85, 0.1, 0.1, 0.68], [-0.85, 0.05, -0.1, 0.68],
     ].slice(0, DECO.cloudPuffCount);
@@ -214,6 +245,78 @@
       arch.rotation.y = Math.atan2(tan.x, tan.z) + Math.PI / 2;
       group.add(arch);
     });
+
+    // ---- Phase6: 観客席(スタート直線+着地後の広い区間) ----
+    const stands = [];
+    const standSpots = [0.965, 0.02];
+    for (let si = 0; si < P6.standCount; si++) {
+      const t = standSpots[si % standSpots.length];
+      const idx = Math.floor(t * s.count) % s.count;
+      const p = s.pts[idx], n = s.nrm[idx], w = s.w[idx];
+      const side = si % 2 === 0 ? 1 : -1;
+      const outset = w + outsetBase + 3;
+      const stand = buildGrandstand(P6, si);
+      stand.position.set(p.x + n.x * outset * side, p.y, p.z + n.z * outset * side);
+      stand.rotation.y = s.tangentAngle(idx) + (side > 0 ? Math.PI / 2 : -Math.PI / 2);
+      group.add(stand);
+      stands.push(stand);
+    }
+    group.userData.skyStands = stands;
+
+    // ---- Phase6: のぼり旗 ----
+    for (const t of P6.noboriSpots) {
+      const idx = Math.floor(t * s.count) % s.count;
+      const p = s.pts[idx], n = s.nrm[idx], w = s.w[idx];
+      const side = rng() < 0.5 ? 1 : -1;
+      const outset = w + outsetBase * 0.5;
+      const nobori = buildNobori(s.tangentAngle(idx), t);
+      nobori.position.set(p.x + n.x * outset * side, p.y, p.z + n.z * outset * side);
+      group.add(nobori);
+    }
+
+    // ---- Phase6: オリジナル看板(架空ブランド) ----
+    for (const b of P6.bannerSpots) {
+      const idx = Math.floor(b.t * s.count) % s.count;
+      const p = s.pts[idx], n = s.nrm[idx], w = s.w[idx];
+      const outset = b.side * (w + outsetBase);
+      const board = buildBillboard(b.text);
+      board.position.set(p.x + n.x * outset, p.y, p.z + n.z * outset);
+      board.rotation.y = s.tangentAngle(idx) + (b.side > 0 ? -Math.PI / 2 : Math.PI / 2);
+      group.add(board);
+    }
+
+    // ---- Phase6: 光るクリスタルキャンディ(路肩に点在、発光オブジェクト) ----
+    const crystalColors = [0xff9fd0, 0x9fd8ff, 0xc6ffb0, 0xffe38a, 0xd6a8ff];
+    const crystals = [];
+    for (let i = 0; i < P6.crystalCount; i++) {
+      const t = (i + 0.6) / P6.crystalCount;
+      const idx = Math.floor(t * s.count) % s.count;
+      const p = s.pts[idx], n = s.nrm[idx], w = s.w[idx];
+      const side = (i % 2 === 0) ? 1 : -1;
+      const outset = w + DECO.offroadWidth * 0.4 + 1.4;
+      const color = crystalColors[i % crystalColors.length];
+      const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.6, 0), Game.mats.glow(color, 1.2));
+      crystal.position.set(p.x + n.x * outset * side, p.y + 0.7, p.z + n.z * outset * side);
+      group.add(crystal);
+      crystals.push({ mesh: crystal, phase: rng() * Math.PI * 2 });
+    }
+    anim.crystals = crystals;
+
+    // ---- Phase6: ランドマーク(遠景の大きな飴細工の城シルエット) ----
+    {
+      let ccx = 0, ccz = 0;
+      for (const p of s.pts) { ccx += p.x; ccz += p.z; }
+      ccx /= s.count; ccz /= s.count;
+      const castle = buildCastleSilhouette();
+      castle.position.set(ccx, 0, ccz - P6.castleSilhouetteDist);
+      group.add(castle);
+
+      // ---- Phase6: 回転する虹のリング(城の上に浮かべる) ----
+      const ring = buildSpinningRainbowRing(P6.ringRadius);
+      ring.position.set(ccx, P6.castleSilhouetteHeight * 0.62, ccz - P6.castleSilhouetteDist);
+      group.add(ring);
+      anim.rainbowRing = ring;
+    }
   }
 
   // group.userData.skyDecoAnimに保存したアニメ対象をたどって浮遊・回転させる。
@@ -230,6 +333,27 @@
     }
     for (const t of a.towers) {
       t.mesh.rotation.y = time * DECO.towerSpinSpeed + t.phase;
+    }
+
+    // 光るクリスタルキャンディを明滅させる
+    if (a.crystals) {
+      for (const c of a.crystals) {
+        c.mesh.rotation.y = time * 0.6 + c.phase;
+        c.mesh.material.emissiveIntensity = 1.0 + Math.sin(time * P6.crystalGlowSpeed + c.phase) * 0.35;
+      }
+    }
+    // 城上空の虹のリングをゆっくり回転させる
+    if (a.rainbowRing) {
+      a.rainbowRing.rotation.z = time * P6.ringSpinSpeed;
+      a.rainbowRing.rotation.y = time * P6.ringSpinSpeed * 0.4;
+    }
+
+    // 観客スタンドを歓声で揺らす
+    const stands = group.userData.skyStands;
+    if (stands) {
+      for (let si = 0; si < stands.length; si++) {
+        stands[si].rotation.z = Math.sin(time * P6.standSwaySpeed + si * 1.2) * P6.standSwayAmp;
+      }
     }
   }
 
@@ -287,6 +411,7 @@
       offroad: 0xdfeeff,
     },
     fogDensity: 0.0032,
+    lighting,
 
     boostPads: DESCENT_BOOSTS,
     jumpPads: [
@@ -309,4 +434,142 @@
       animateGroup(time, group);
     },
   };
+
+  // ---- Phase6: 観客スタンド(段状ボックス+InstancedMeshの観客球) ----
+  function buildGrandstand(cfg, seed) {
+    const grp = new THREE.Group();
+    const frameMat = Game.mats.matte(0xf4f0ff);
+    for (let r = 0; r < cfg.standRows; r++) {
+      const step = new THREE.Mesh(
+        new THREE.BoxGeometry(cfg.standWidth, cfg.standRowHeight, cfg.standRowDepth),
+        frameMat
+      );
+      step.position.set(0, cfg.standRowHeight * (r + 0.5), -r * cfg.standRowDepth * 1.35);
+      grp.add(step);
+    }
+    const seatCount = cfg.standRows * cfg.standSeatsPerRow;
+    const seatGeo = new THREE.SphereGeometry(0.3, 7, 6);
+    const seatMat = Game.mats.matte(0xffffff);
+    const inst = new THREE.InstancedMesh(seatGeo, seatMat, seatCount);
+    const dummy = new THREE.Object3D();
+    const hues = [0xff9fd0, 0x9fd8ff, 0xc6ffb0, 0xffe38a, 0xd6a8ff];
+    let k = 0;
+    let lseed = 8100 + seed * 47;
+    const lrnd = () => { lseed = (lseed * 1103515245 + 12345) & 0x7fffffff; return (lseed % 10000) / 10000; };
+    for (let r = 0; r < cfg.standRows; r++) {
+      for (let c = 0; c < cfg.standSeatsPerRow; c++) {
+        const px = (c / (cfg.standSeatsPerRow - 1) - 0.5) * (cfg.standWidth - 1.2);
+        const py = cfg.standRowHeight * (r + 1) + 0.3;
+        const pz = -r * cfg.standRowDepth * 1.35 + (lrnd() - 0.5) * 0.3;
+        dummy.position.set(px, py, pz);
+        dummy.scale.setScalar(0.85 + lrnd() * 0.3);
+        dummy.updateMatrix();
+        inst.setMatrixAt(k, dummy.matrix);
+        inst.setColorAt(k, new THREE.Color(hues[Math.floor(lrnd() * hues.length)]));
+        k++;
+      }
+    }
+    inst.instanceMatrix.needsUpdate = true;
+    if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
+    inst.castShadow = true;
+    grp.add(inst);
+    return grp;
+  }
+
+  // のぼり旗
+  function buildNobori(angle, tSeed) {
+    const grp = new THREE.Group();
+    const poleMat = Game.mats.metal(0xe8d8ff);
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 3.2, 6), poleMat);
+    pole.position.y = 1.6;
+    grp.add(pole);
+    const cols = ['#ff9fd0', '#9fd8ff', '#c6ffb0', '#ffe38a'];
+    const cv = document.createElement('canvas');
+    cv.width = 32; cv.height = 96;
+    const x = cv.getContext('2d');
+    x.fillStyle = '#ffffff'; x.fillRect(0, 0, 32, 96);
+    x.fillStyle = cols[Math.floor((tSeed * 971) % cols.length)];
+    x.fillRect(0, 0, 32, 18);
+    x.fillRect(0, 78, 32, 18);
+    x.font = 'bold 14px sans-serif';
+    x.textAlign = 'center';
+    x.save(); x.translate(16, 48); x.rotate(Math.PI / 2);
+    x.fillStyle = '#8a5aa0';
+    x.fillText('SKY CUP', 0, 6);
+    x.restore();
+    const flagMat = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cv), side: THREE.DoubleSide });
+    const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 2.1), flagMat);
+    flag.position.set(0.4, 2.3, 0);
+    grp.add(flag);
+    grp.rotation.y = angle;
+    return grp;
+  }
+
+  // オリジナル架空ブランドの看板(Canvas文字)
+  function buildBillboard(text) {
+    const grp = new THREE.Group();
+    const legMat = Game.mats.metal(0xe8d8ff);
+    for (const lx of [-1.6, 1.6]) {
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 3.3, 8), legMat);
+      leg.position.set(lx, 1.65, 0);
+      grp.add(leg);
+    }
+    const cv = document.createElement('canvas');
+    cv.width = 512; cv.height = 160;
+    const x = cv.getContext('2d');
+    const grad = x.createLinearGradient(0, 0, 0, 160);
+    grad.addColorStop(0, '#fff0fa'); grad.addColorStop(1, '#ffd0ea');
+    x.fillStyle = grad; x.fillRect(0, 0, 512, 160);
+    x.strokeStyle = '#ff9fd0'; x.lineWidth = 10; x.strokeRect(6, 6, 500, 148);
+    x.fillStyle = '#8a5aa0';
+    x.font = 'bold 50px sans-serif';
+    x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillText(text, 256, 84);
+    const boardMat = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cv) });
+    const board = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 1.35), boardMat);
+    board.position.set(0, 3.8, 0.08);
+    grp.add(board);
+    const backMat = Game.mats.matte(0xffe6f5);
+    const back = new THREE.Mesh(new THREE.BoxGeometry(4.2, 1.35, 0.12), backMat);
+    back.position.set(0, 3.8, -0.02);
+    grp.add(back);
+    return grp;
+  }
+
+  // ランドマーク: 遠景の大きな飴細工の城シルエット(単色シルエットで軽量、fogに溶けて奥行きを演出)
+  function buildCastleSilhouette() {
+    const grp = new THREE.Group();
+    const mat = new THREE.MeshBasicMaterial({ color: 0xd9b8e8, fog: true, transparent: true, opacity: 0.85 });
+    const keep = new THREE.Mesh(new THREE.CylinderGeometry(14, 18, 55, 10), mat);
+    keep.position.y = 27.5;
+    grp.add(keep);
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(20, 26, 10), mat);
+    roof.position.y = 55 + 13;
+    grp.add(roof);
+    const towerPositions = [[-22, 0.75, -6], [22, 0.75, -6], [0, 0.9, -18]];
+    for (const [tx, scale, tz] of towerPositions) {
+      const tower = new THREE.Mesh(new THREE.CylinderGeometry(6 * scale, 7 * scale, 38 * scale, 8), mat);
+      tower.position.set(tx, 19 * scale, tz);
+      grp.add(tower);
+      const tRoof = new THREE.Mesh(new THREE.ConeGeometry(8 * scale, 14 * scale, 8), mat);
+      tRoof.position.set(tx, 38 * scale + 7 * scale, tz);
+      grp.add(tRoof);
+    }
+    grp.traverse((o) => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; } });
+    return grp;
+  }
+
+  // ランドマーク: 城の上空で回転する虹のリング(トーラス、4色バンド)
+  function buildSpinningRainbowRing(radius) {
+    const g = new THREE.Group();
+    const bandColors = [0xff9fd0, 0xffe38a, 0xc6ffb0, 0x9fd8ff];
+    bandColors.forEach((color, i) => {
+      const r = radius - i * (radius * 0.045);
+      const geo = new THREE.TorusGeometry(r, radius * 0.035, 8, 24);
+      const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9 });
+      const band = new THREE.Mesh(geo, mat);
+      g.add(band);
+    });
+    return g;
+  }
 })();
