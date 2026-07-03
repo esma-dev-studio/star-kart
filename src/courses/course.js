@@ -112,13 +112,14 @@ Game.Course = class Course {
 
     scene.background = new THREE.Color(c.sky);
     scene.fog = new THREE.FogExp2(c.fog ?? c.sky, this.def.fogDensity ?? 0.0038);
+    g.add(this.buildSkyDome(c));
 
-    // 地面(最低い路面より下に敷く)
+    // 地面: 中心=地面色→外周=フォグ色のラジアルグラデーションで地平線に溶かす
     let minY = Infinity;
     for (const p of s.pts) minY = Math.min(minY, p.y);
     const ground = new THREE.Mesh(
       new THREE.PlaneGeometry(2400, 2400),
-      new THREE.MeshLambertMaterial({ color: c.ground })
+      new THREE.MeshLambertMaterial({ map: this.groundTexture(c) })
     );
     ground.rotation.x = -Math.PI / 2;
     ground.position.y = minY - 1.6;
@@ -185,20 +186,92 @@ Game.Course = class Course {
     return new THREE.Mesh(geo, mat);
   }
 
+  // 空: 上=深い色→地平線=明るい色のグラデーションドーム
+  buildSkyDome(c) {
+    const base = new THREE.Color(c.sky);
+    const hsl = { h: 0, s: 0, l: 0 };
+    base.getHSL(hsl);
+    const top = new THREE.Color().setHSL(hsl.h, Math.min(1, hsl.s + 0.18), Math.max(0, hsl.l - 0.16));
+    const horizon = new THREE.Color().setHSL(hsl.h, Math.max(0, hsl.s - 0.05), Math.min(1, hsl.l + 0.14));
+    const cv = document.createElement('canvas');
+    cv.width = 4; cv.height = 256;
+    const x = cv.getContext('2d');
+    const grad = x.createLinearGradient(0, 0, 0, 256);
+    grad.addColorStop(0, '#' + top.getHexString());
+    grad.addColorStop(0.55, '#' + base.getHexString());
+    grad.addColorStop(1, '#' + horizon.getHexString());
+    x.fillStyle = grad;
+    x.fillRect(0, 0, 4, 256);
+    const dome = new THREE.Mesh(
+      new THREE.SphereGeometry(950, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.62),
+      new THREE.MeshBasicMaterial({
+        map: new THREE.CanvasTexture(cv), side: THREE.BackSide, fog: false, depthWrite: false,
+      })
+    );
+    dome.position.y = -40;
+    dome.renderOrder = -10;
+    return dome;
+  }
+
+  groundTexture(c) {
+    const cv = document.createElement('canvas');
+    cv.width = 512; cv.height = 512;
+    const x = cv.getContext('2d');
+    const gcol = new THREE.Color(c.ground), fcol = new THREE.Color(c.fog ?? c.sky);
+    const grad = x.createRadialGradient(256, 256, 40, 256, 256, 256);
+    grad.addColorStop(0, '#' + gcol.getHexString());
+    grad.addColorStop(0.55, '#' + gcol.getHexString());
+    grad.addColorStop(1, '#' + fcol.getHexString());
+    x.fillStyle = grad;
+    x.fillRect(0, 0, 512, 512);
+    // うっすら斑点でのっぺり感を消す
+    x.fillStyle = '#' + gcol.clone().multiplyScalar(0.93).getHexString();
+    let seed = 7;
+    const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    for (let i = 0; i < 260; i++) {
+      const px = rnd() * 512, py = rnd() * 512, r = 2 + rnd() * 6;
+      if (Math.hypot(px - 256, py - 256) > 235) continue;
+      x.beginPath(); x.arc(px, py, r, 0, Math.PI * 2); x.fill();
+    }
+    return new THREE.CanvasTexture(cv);
+  }
+
   roadTexture(c) {
     const cv = document.createElement('canvas');
-    cv.width = 128; cv.height = 128;
+    cv.width = 256; cv.height = 256;
     const x = cv.getContext('2d');
-    x.fillStyle = c.road; x.fillRect(0, 0, 128, 128);
-    // うっすら明暗ノイズ
-    for (let i = 0; i < 90; i++) {
-      x.fillStyle = 'rgba(255,255,255,0.045)';
-      x.fillRect((i * 37) % 128, (i * 53) % 128, 10, 10);
+    x.fillStyle = c.road; x.fillRect(0, 0, 256, 256);
+    // 細かなスペックル(ざらつき)
+    let seed = 42;
+    const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    for (let i = 0; i < 420; i++) {
+      x.fillStyle = rnd() < 0.5 ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
+      const px = rnd() * 256, py = rnd() * 256, r = 1 + rnd() * 2.5;
+      x.beginPath(); x.arc(px, py, r, 0, Math.PI * 2); x.fill();
     }
-    x.fillStyle = c.edge;
-    x.fillRect(0, 0, 7, 128); x.fillRect(121, 0, 7, 128);
+    // センターの破線
+    x.fillStyle = 'rgba(255,250,235,0.6)';
+    for (let yPos = 8; yPos < 256; yPos += 64) x.fillRect(124, yPos, 8, 34);
+    // 両端のキャンディ縁石(斜めストライプ。レース感と世界観を両立)
+    const curb = c.curb || '#ff6f91';
+    const curbW = 18;
+    const drawCurb = (x0) => {
+      x.save();
+      x.beginPath(); x.rect(x0, 0, curbW, 256); x.clip();
+      x.fillStyle = '#fff6f0'; x.fillRect(x0, 0, curbW, 256);
+      x.fillStyle = curb;
+      for (let yPos = -32; yPos < 288; yPos += 32) {
+        x.beginPath();
+        x.moveTo(x0, yPos); x.lineTo(x0 + curbW, yPos + 14);
+        x.lineTo(x0 + curbW, yPos + 30); x.lineTo(x0, yPos + 16);
+        x.closePath(); x.fill();
+      }
+      x.restore();
+    };
+    drawCurb(0); drawCurb(256 - curbW);
     const tex = new THREE.CanvasTexture(cv);
     tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping;
+    tex.anisotropy = 4;
     return tex;
   }
 

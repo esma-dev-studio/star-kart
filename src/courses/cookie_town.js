@@ -68,6 +68,7 @@
       ground: 0xe8b98a,
       road: '#c9955f',
       edge: '#fff3df',
+      curb: '#ff6f91',
       offroad: 0xd9a86c,
     },
     // ブーストパッド2箇所: S字明け(コーナー進入前の加速)と広い直線

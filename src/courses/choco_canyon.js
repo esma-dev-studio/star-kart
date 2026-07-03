@@ -25,6 +25,7 @@ Game.courses = Game.courses || {};
     ground: 0x8a5a34,
     road: '#8f4f2c',
     edge: '#ffdca0',
+    curb: '#ff9d3c',
     offroad: 0x6e4526,
   };
 

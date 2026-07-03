@@ -283,6 +283,7 @@
       ground: 0xffffff,     // 雲海(地面代わり)
       road: '#f4f0ff',
       edge: '#ff9fd0',
+      curb: '#8ad0ff',
       offroad: 0xdfeeff,
     },
     fogDensity: 0.0032,

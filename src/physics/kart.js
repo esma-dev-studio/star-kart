@@ -326,12 +326,34 @@ Game.Kart = class Kart {
     const seatBack = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.6, 0.25), bodyMat);
     seatBack.position.set(0, 1.0, -0.9);
     tilt.add(seatBack);
-    // 乗り手プレースホルダ(Phase4でキャラモデルに差し替え)
+    // 乗り手プレースホルダ(characters.mountOnでキャラモデルに差し替わる)
     const rider = new THREE.Mesh(new THREE.SphereGeometry(0.55, 14, 12),
       new THREE.MeshLambertMaterial({ color: 0xfff2e8 }));
     rider.position.set(0, 1.25, -0.25);
     rider.name = 'riderPlaceholder';
     tilt.add(rider);
+
+    // レーシング装備: リアスポイラー/センターストライプ/ヘッドライト
+    const darker = new THREE.Color(this.color).multiplyScalar(0.72);
+    const spoilerMat = new THREE.MeshLambertMaterial({ color: darker });
+    const wing = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.09, 0.42), spoilerMat);
+    wing.position.set(0, 1.18, -1.3);
+    tilt.add(wing);
+    for (const sx of [-0.55, 0.55]) {
+      const strut = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.34, 0.09), spoilerMat);
+      strut.position.set(sx, 0.98, -1.3);
+      tilt.add(strut);
+    }
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.03, 2.4),
+      new THREE.MeshLambertMaterial({ color: 0xfff6ee }));
+    stripe.position.set(0, 0.815, 0);
+    tilt.add(stripe);
+    for (const sx of [-0.5, 0.5]) {
+      const light = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 8),
+        new THREE.MeshBasicMaterial({ color: 0xfffbe0 }));
+      light.position.set(sx, 0.56, 1.81);
+      tilt.add(light);
+    }
 
     this._wheels = [];
     for (const [x, z, front] of [[-0.95, 0.85, true], [0.95, 0.85, true], [-0.95, -0.9, false], [0.95, -0.9, false]]) {
