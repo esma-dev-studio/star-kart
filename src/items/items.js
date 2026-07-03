@@ -127,6 +127,9 @@ const ITEM_DEFS = {
       this._scene = scene;
       this._course = course;
       this._race = race;
+      // 共有リソースは毎レース作り直す。newScene()が旧シーンをtraverseして
+      // geometry/material/textureを全disposeするため、キャッシュの使い回しは不可
+      SHARED = null;
       this._shared = ensureShared();
 
       this._boxes = []; // { spot, pos, group, taken, respawnT }
@@ -169,6 +172,7 @@ const ITEM_DEFS = {
       }
       this._boxes = [];
       this._entities = [];
+      this._scene = null; // 古いシーンへの参照を残さない
     },
 
     // ---- フレーム更新 ----
@@ -254,6 +258,7 @@ const ITEM_DEFS = {
               kart.items.push(won);
             }
             kart._itemHeldT = 0; // aiWantsToUseの強制使用タイマー
+            if (kart.isPlayer && Game.audio) Game.audio.sfx('itemGet');
             if (kart.onItemWon) kart.onItemWon(won);
           }
         }
@@ -272,6 +277,7 @@ const ITEM_DEFS = {
       if (!kart.items || kart.items.length === 0) return;
       const id = kart.items.shift();
       kart._itemHeldT = 0;
+      if (kart.isPlayer && Game.audio) Game.audio.sfx('itemUse');
       this._activate(id, kart, race);
     },
 
@@ -475,6 +481,7 @@ const ITEM_DEFS = {
 
     _removeStarVisual(kart) {
       if (kart._starVisual && kart.group) {
+        kart._starVisual.material.dispose(); // clone()したマテリアルは自前で破棄
         kart.group.remove(kart._starVisual);
         kart._starVisual = null;
       }
@@ -619,6 +626,7 @@ const ITEM_DEFS = {
 
     _explodeLemon(e, karts) {
       const P = Game.config.items.params;
+      if (Game.fx) Game.fx.burst(e.pos, 'explosion');
       const radius = P.lemonBlastRadius + ITEM_TUNING.lemonBlastFudge;
       for (const kart of karts) {
         if (kart === e.owner && e.safeT > 0) continue;
@@ -723,7 +731,7 @@ const ITEM_DEFS = {
       const t = Game.U.clamp(1 - e.life / 0.4, 0, 1);
       e.mesh.scale.setScalar(0.1 + t * e.growTo);
       e.mesh.material.opacity = 0.55 * (1 - t);
-      if (e.life <= 0) this._removeEntity(e);
+      if (e.life <= 0) { e.mesh.material.dispose(); this._removeEntity(e); } // clone()したマテリアルは自前で破棄
     }
   };
 

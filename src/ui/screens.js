@@ -199,6 +199,15 @@
 
       this.setState('title');
 
+      // サウンドはブラウザ仕様上、ユーザー操作後にしか開始できない
+      const startAudio = () => {
+        if (Game.audio) { Game.audio.init(); Game.audio.playBgm('title'); }
+        window.removeEventListener('keydown', startAudio);
+        window.removeEventListener('pointerdown', startAudio);
+      };
+      window.addEventListener('keydown', startAudio);
+      window.addEventListener('pointerdown', startAudio);
+
       Game.app.start((dt) => this._update(dt));
     },
 
@@ -217,6 +226,13 @@
       if (next === 'courseSelect') this._enterCourseSelect();
       if (next === 'result') this._enterResult();
       if (next === 'award') this._enterAward();
+
+      // BGM切替(レース用BGMは_launchRaceで開始する)
+      if (Game.audio) {
+        if (next === 'title') Game.audio.playBgm('title');
+        else if (next === 'result') { Game.audio.detachAll(); Game.audio.playBgm('result'); }
+        else if (next === 'award') { Game.audio.detachAll(); Game.audio.playBgm('award'); }
+      }
     },
 
     _update(dt) {
@@ -601,6 +617,38 @@
         this._raceCtx.ended = true;
         this._raceCtx.endedT = 0;
       };
+
+      // ---- 演出・サウンドの配線(既存コールバックはチェーンで残す) ----
+      if (Game.fx) {
+        Game.fx.init(scene);
+        entries.forEach((e) => Game.fx.attachKart(e.kart, e.kart === playerKart));
+      }
+      if (Game.audio) {
+        Game.audio.detachAll(); // リスタート/連戦時に旧カートのエンジン音を確実に止める
+        Game.audio.attachKart(playerKart, true); // CPUは距離減衰が無く騒がしくなるためプレイヤーのみ
+        Game.audio.playBgm(def.id);
+      }
+      const prevTick = race.onCountdownTick;
+      race.onCountdownTick = (n) => { if (prevTick) prevTick(n); if (Game.audio) Game.audio.sfx('countBeep'); };
+      const prevGo = race.onGo;
+      race.onGo = () => { if (prevGo) prevGo(); if (Game.audio) Game.audio.sfx('countGo'); };
+      const prevLap = race.onLapChange;
+      race.onLapChange = (kart, lap) => {
+        if (prevLap) prevLap(kart, lap);
+        if (kart === playerKart && Game.audio) {
+          Game.audio.sfx('lap');
+          if (lap === race.laps) Game.audio.setFinalLap(true);
+        }
+      };
+      const prevFin = race.onKartFinish;
+      race.onKartFinish = (kart, time, rank) => {
+        if (prevFin) prevFin(kart, time, rank);
+        if (kart === playerKart) {
+          if (Game.audio) Game.audio.sfx('finish');
+          if (Game.fx) Game.fx.burst(kart.pos, 'confetti');
+        }
+      };
+
       race.start();
 
       this._raceCtx = {
@@ -650,6 +698,7 @@
     _quitToTitle() {
       this._pauseOverlay.classList.add('hidden');
       if (Game.hud && this._hudActive) { Game.hud.destroy(); this._hudActive = false; }
+      if (Game.audio) Game.audio.detachAll(); // エンジン音の止め忘れ防止
       this._raceCtx = null;
       this.setState('title');
     },
@@ -670,6 +719,8 @@
         ctx.elapsed += dt;
         if (ctx.course.def.animate && ctx.course.group) ctx.course.def.animate(ctx.elapsed, ctx.course.group);
         ctx.cam.update(dt, ctx.playerKart);
+        if (Game.fx) Game.fx.update(dt);
+        if (Game.audio) Game.audio.update(dt, ctx.playerKart);
       }
 
       if (Game.hud) Game.hud.update(dt);

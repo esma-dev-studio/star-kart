@@ -149,6 +149,18 @@
       hudEl.appendChild(root);
       this._root = root;
 
+      // 毎フレームのquerySelectorを避けるため要素参照をキャッシュする
+      this._els = {
+        rank: root.querySelector('#hudRank'),
+        lap: root.querySelector('#hudLap'),
+        timer: root.querySelector('#hudTimer'),
+        slotMain: root.querySelector('#hudSlotMain'),
+        queue: root.querySelector('#hudQueue'),
+        driftBar: root.querySelector('#hudDriftBar'),
+        driftFill: root.querySelector('#hudDriftBar .fill'),
+        speedLines: root.querySelector('#hudSpeedLines'),
+      };
+
       this._mmCanvas = root.querySelector('#hudMinimap');
       const size = HUD_TUNING.minimapSize;
       this._mmCanvas.width = size;
@@ -201,6 +213,7 @@
     destroy() {
       if (this._root && this._root.parentNode) this._root.parentNode.removeChild(this._root);
       this._root = null;
+      this._els = null;
       this._mmCanvas = null; this._mmCtx = null;
     },
 
@@ -243,7 +256,7 @@
     },
 
     _updateRank(kart) {
-      const el = this._root.querySelector('#hudRank');
+      const el = this._els.rank;
       const rank = Number.isFinite(kart.rank) ? kart.rank : null;
       if (rank == null) { if (el.textContent !== '') el.textContent = ''; return; }
       if (rank !== this._lastRank) {
@@ -259,7 +272,7 @@
     },
 
     _updateLap(kart, race) {
-      const el = this._root.querySelector('#hudLap');
+      const el = this._els.lap;
       const lap = Number.isFinite(kart.lap) ? kart.lap : null;
       const laps = Number.isFinite(race.laps) ? race.laps : null;
       if (lap == null || laps == null) return;
@@ -270,7 +283,7 @@
     },
 
     _updateTimer(race) {
-      const el = this._root.querySelector('#hudTimer');
+      const el = this._els.timer;
       const t = Number.isFinite(race.raceTime) ? Math.max(0, race.raceTime) : 0;
       const m = Math.floor(t / 60);
       const s = t - m * 60;
@@ -282,8 +295,8 @@
     },
 
     _updateItemBox(kart, dt) {
-      const mainSlot = this._root.querySelector('#hudSlotMain');
-      const queueEl = this._root.querySelector('#hudQueue');
+      const mainSlot = this._els.slotMain;
+      const queueEl = this._els.queue;
       const defs = (Game.items && Game.items.defs) || {};
       const inRoulette = (kart._rouletteT || 0) > 0;
 
@@ -390,7 +403,7 @@
     },
 
     _updateDriftBar(kart) {
-      const wrap = this._root.querySelector('#hudDriftBar');
+      const wrap = this._els.driftBar;
       const drifting = kart.drift && kart.drift.state === 'drifting';
       if (drifting !== this._driftVisible) {
         wrap.style.display = drifting ? '' : 'none';
@@ -402,14 +415,14 @@
       const level = Number.isFinite(kart.drift.level) ? kart.drift.level : 0;
       const maxTime = P.miniTurbo[P.miniTurbo.length - 1].time;
       const ratio = Game.U.clamp(charge / maxTime, 0, 1);
-      const fill = wrap.querySelector('.fill');
+      const fill = this._els.driftFill;
       fill.style.width = `${(ratio * 100).toFixed(1)}%`;
       const color = level > 0 ? P.sparkColors[level - 1] : P.sparkColors[0];
       fill.style.background = `#${color.toString(16).padStart(6, '0')}`;
     },
 
     _updateSpeedLines(kart) {
-      const el = this._root.querySelector('#hudSpeedLines');
+      const el = this._els.speedLines;
       const on = (kart.boostT || 0) > 0;
       if (on !== this._speedLinesOn) {
         el.classList.toggle('on', on);
