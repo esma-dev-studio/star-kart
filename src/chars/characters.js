@@ -1,18 +1,17 @@
-// キャラクター9体 v2: データ定義+プロシージャルモデル生成(THREEプリミティブ+CanvasTexture)
-// プレミアム化(Phase 6): Game.mats(paint/matte/metal/rubber/glow/glass)で質感差、
-// キャラごとの専用アクセサリーでシルエット強化、表情差分(事前生成メッシュ切替)、
-// Game.characters.animate() による走行中のもちもちアニメーションを追加。
-// 全キャラ共通: 白目+虹彩+ハイライトの重ね目、表情差分のある口、1.5頭身、原点=足元中央、+Z向き
+// キャラクター9体 v3: ロスター刷新(人外レーサー版)。データ定義+プロシージャルモデル生成。
+// 「お菓子の王国」マスコット群(第2版)を退役させ、シュガリア王国GPに種族も背景も異なる
+// 9人のレーサーが自分の意思で参戦している構図に刷新(DESIGN.md 2-v3準拠)。
+// 全キャラ共通: 頭・胴・腕(左右独立ノード arm_L_pivot/arm_R_pivot)・脚(or代替下半身)を持ち、
+// ハンドルを握るポーズが成立する。白目+虹彩+ハイライトの重ね目、表情4種(visible切替)、
+// Game.mats(paint/matte/metal/rubber/glow/glass)で質感差。原点=足元中央、+Z向き。
 (function () {
   // ==================== 定数(冒頭集約) ====================
   const SEG_LOW = 8;
   const SEG_MID = 12;
   const SEG_HI = 16;
 
-  const C_IRIS = { macaron: 0x6b3f2a, default: 0x3a2a20 };
   const C_WHITE = 0xffffff;
-  const C_BLUSH = 0xff9fb8;
-  const C_SKIN_LINE = 0x5a3a2e; // 輪郭線色
+  const C_SKIN_LINE = 0x4a3226; // 輪郭線色(口テクスチャ用)
 
   // 表情キー
   const EXPR = {
@@ -52,130 +51,114 @@
     tex.needsUpdate = true;
     return tex;
   }
-
-  // いちごチョコ+スプレー(ドーナツ)
-  function texDonut(size) {
-    const cv = makeCanvas(size), ctx = cv.getContext('2d');
-    ctx.fillStyle = '#ff6f91';
-    ctx.fillRect(0, 0, size, size);
-    // ツヤの陰影グラデーションを重ねて単色ベタ塗りを回避
-    const grad = ctx.createLinearGradient(0, 0, 0, size);
-    grad.addColorStop(0, 'rgba(255,255,255,0.35)');
-    grad.addColorStop(0.4, 'rgba(255,255,255,0)');
-    grad.addColorStop(1, 'rgba(0,0,0,0.18)');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, size, size);
-    const sprinkle = ['#ffe066', '#69d1ff', '#8affc1', '#ffffff', '#ffb3de'];
-    for (let i = 0; i < 70; i++) {
-      ctx.save();
-      ctx.translate(Math.random() * size, Math.random() * size);
-      ctx.rotate(Math.random() * Math.PI * 2);
-      ctx.fillStyle = sprinkle[i % sprinkle.length];
-      ctx.fillRect(-size * 0.02, -size * 0.005, size * 0.04, size * 0.01);
-      ctx.restore();
-    }
-    return toTexture(cv);
-  }
-
-  // 格子焼き目(ワッフル)
-  function texWaffle(size) {
-    const cv = makeCanvas(size), ctx = cv.getContext('2d');
-    ctx.fillStyle = '#f2b23a';
-    ctx.fillRect(0, 0, size, size);
-    ctx.strokeStyle = '#c9871c';
-    ctx.lineWidth = size * 0.035;
-    const step = size / 6;
-    for (let i = 1; i < 6; i++) {
-      ctx.beginPath(); ctx.moveTo(i * step, 0); ctx.lineTo(i * step, size); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(0, i * step); ctx.lineTo(size, i * step); ctx.stroke();
-    }
-    // 焼き色ムラ
-    for (let i = 0; i < 10; i++) {
-      ctx.fillStyle = `rgba(180,110,20,${0.05 + Math.random() * 0.08})`;
-      ctx.beginPath();
-      ctx.arc(Math.random() * size, Math.random() * size, size * (0.08 + Math.random() * 0.1), 0, Math.PI * 2);
-      ctx.fill();
-    }
-    return toTexture(cv);
-  }
-
-  // 割れ目溝(板チョコ)
-  function texChoco(size) {
-    const cv = makeCanvas(size), ctx = cv.getContext('2d');
-    ctx.fillStyle = '#4a2b1c';
-    ctx.fillRect(0, 0, size, size);
-    const grad = ctx.createLinearGradient(0, 0, size, size);
-    grad.addColorStop(0, 'rgba(255,255,255,0.16)');
-    grad.addColorStop(0.5, 'rgba(255,255,255,0)');
-    grad.addColorStop(1, 'rgba(0,0,0,0.22)');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, size, size);
-    ctx.strokeStyle = '#2c1710';
-    ctx.lineWidth = size * 0.03;
-    const step = size / 4;
-    for (let i = 1; i < 4; i++) {
-      ctx.beginPath(); ctx.moveTo(i * step, 0); ctx.lineTo(i * step, size); ctx.stroke();
-    }
-    ctx.beginPath(); ctx.moveTo(0, size / 2); ctx.lineTo(size, size / 2); ctx.stroke();
-    return toTexture(cv);
-  }
-
-  // 年輪(バウムクーヘン)
-  function texBaum(size) {
-    const cv = makeCanvas(size), ctx = cv.getContext('2d');
-    ctx.fillStyle = '#c9925a';
-    ctx.fillRect(0, 0, size, size);
-    ctx.strokeStyle = '#8a5a2e';
-    ctx.lineWidth = size * 0.025;
-    for (let y = 0; y < size; y += size / 8) {
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(size, y); ctx.stroke();
-      ctx.strokeStyle = `rgba(138,90,46,${0.5 + Math.random() * 0.3})`;
-    }
-    return toTexture(cv);
-  }
-
-  // 赤白ストライプ(金平糖)
-  function texBonbon(size) {
-    const cv = makeCanvas(size), ctx = cv.getContext('2d');
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, size, size);
-    ctx.fillStyle = '#ff5d7a';
-    const stripeW = size / 8;
-    for (let x = -size; x < size * 2; x += stripeW * 2) {
-      ctx.save();
-      ctx.translate(x, 0);
-      ctx.beginPath();
-      ctx.moveTo(0, 0); ctx.lineTo(stripeW, 0); ctx.lineTo(stripeW - size, size); ctx.lineTo(-size, size);
-      ctx.closePath();
-      ctx.fill();
-      ctx.restore();
-    }
-    return toTexture(cv);
-  }
-
-  // マカロンの殻(表面のざらつきトーン)
-  function texMacaronShell(size, baseHex) {
-    const cv = makeCanvas(size), ctx = cv.getContext('2d');
-    ctx.fillStyle = baseHex;
-    ctx.fillRect(0, 0, size, size);
-    for (let i = 0; i < 400; i++) {
-      ctx.fillStyle = `rgba(255,255,255,${Math.random() * 0.1})`;
-      ctx.beginPath();
-      ctx.arc(Math.random() * size, Math.random() * size, Math.random() * size * 0.01, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    return toTexture(cv);
-  }
-
   function hexToCss(hex) {
     return '#' + hex.toString(16).padStart(6, '0');
   }
 
+  // ==================== キャラ専用Canvasテクスチャ ====================
+  // クリーム前髪の渦
+  function texCreamSwirl(size) {
+    const cv = makeCanvas(size), ctx = cv.getContext('2d');
+    ctx.fillStyle = '#fff6e0';
+    ctx.fillRect(0, 0, size, size);
+    ctx.strokeStyle = 'rgba(230,190,130,0.55)';
+    ctx.lineWidth = size * 0.03;
+    ctx.beginPath();
+    ctx.arc(size * 0.5, size * 0.55, size * 0.28, 0, Math.PI * 1.5);
+    ctx.stroke();
+    return toTexture(cv);
+  }
+
+  // キツネの毛並み(オレンジ×白のグラデ)
+  function texFoxFur(size) {
+    const cv = makeCanvas(size), ctx = cv.getContext('2d');
+    const grad = ctx.createLinearGradient(0, 0, 0, size);
+    grad.addColorStop(0, '#ff9a3c');
+    grad.addColorStop(1, '#ff7a1c');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.beginPath();
+    ctx.moveTo(size * 0.5, size);
+    ctx.quadraticCurveTo(size * 0.5, size * 0.35, size * 0.5, size * 0.15);
+    ctx.lineTo(size * 0.5, size);
+    ctx.closePath();
+    // 胸元の白い模様
+    ctx.beginPath();
+    ctx.ellipse(size * 0.5, size * 0.75, size * 0.18, size * 0.28, 0, 0, Math.PI * 2);
+    ctx.fill();
+    return toTexture(cv);
+  }
+
+  // キャラメル岩(ひび割れ+発光ムラ)
+  function texCaramelRock(size) {
+    const cv = makeCanvas(size), ctx = cv.getContext('2d');
+    ctx.fillStyle = '#8a7362';
+    ctx.fillRect(0, 0, size, size);
+    for (let i = 0; i < 60; i++) {
+      ctx.fillStyle = `rgba(0,0,0,${0.05 + Math.random() * 0.12})`;
+      ctx.beginPath();
+      ctx.arc(Math.random() * size, Math.random() * size, size * (0.02 + Math.random() * 0.05), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // ひび割れの発光ライン
+    ctx.strokeStyle = '#ff6a1c';
+    ctx.lineWidth = size * 0.02;
+    for (let i = 0; i < 5; i++) {
+      ctx.beginPath();
+      let x = Math.random() * size, y = Math.random() * size;
+      ctx.moveTo(x, y);
+      for (let j = 0; j < 4; j++) {
+        x += (Math.random() - 0.5) * size * 0.3;
+        y += (Math.random() - 0.5) * size * 0.3;
+        ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+    return toTexture(cv);
+  }
+
+  // 年輪(バウム翁)
+  function texWoodRing(size) {
+    const cv = makeCanvas(size), ctx = cv.getContext('2d');
+    ctx.fillStyle = '#a9773f';
+    ctx.fillRect(0, 0, size, size);
+    for (let y = 0; y < size; y += size / 9) {
+      ctx.strokeStyle = `rgba(110,70,30,${0.45 + Math.random() * 0.3})`;
+      ctx.lineWidth = size * 0.018;
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(size, y); ctx.stroke();
+    }
+    return toTexture(cv);
+  }
+
+  // ジンジャークッキーのアイシング隈取り+忍者帯用の地の生地
+  function texGingerBody(size) {
+    const cv = makeCanvas(size), ctx = cv.getContext('2d');
+    ctx.fillStyle = '#a86a34';
+    ctx.fillRect(0, 0, size, size);
+    const grad = ctx.createLinearGradient(0, 0, 0, size);
+    grad.addColorStop(0, 'rgba(255,255,255,0.15)');
+    grad.addColorStop(1, 'rgba(0,0,0,0.18)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+    return toTexture(cv);
+  }
+
+  // ビターカカオ鎧下地(縞なしのつや消し黒/割れ目)
+  function texBitterArmor(size) {
+    const cv = makeCanvas(size), ctx = cv.getContext('2d');
+    ctx.fillStyle = '#241512';
+    ctx.fillRect(0, 0, size, size);
+    const grad = ctx.createLinearGradient(0, 0, size, size);
+    grad.addColorStop(0, 'rgba(255,255,255,0.08)');
+    grad.addColorStop(0.5, 'rgba(255,255,255,0)');
+    grad.addColorStop(1, 'rgba(0,0,0,0.3)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+    return toTexture(cv);
+  }
+
   // ==================== 顔テクスチャ(表情差分) ====================
-  // 目は「白目球+虹彩球+ハイライト球」の重ね構造メッシュで作り、表情は
-  // 口テクスチャの差し替え(Canvas)+目メッシュのスケール/回転で表現する。
-  // 毎フレームの生成を禁止するため、build()時に4表情ぶんの口テクスチャを
-  // 事前生成してMeshに割り当て、animate()ではvisible切替のみ行う。
   function drawMouthNormal(ctx, size) {
     ctx.clearRect(0, 0, size, size);
     ctx.strokeStyle = hexToCss(C_SKIN_LINE);
@@ -223,6 +206,41 @@
     ctx.ellipse(size * 0.5, size * 0.28, size * 0.22, size * 0.1, 0, 0, Math.PI * 2);
     ctx.fill();
   }
+  // ノワール卿専用: 兜スリットの発光ライン(通常=細い一文字、興奮=角度をつけて鋭く、
+  // ダウン=波打つ、勝利=にやりと弧を描く)。glowマテリアルのプレーンに描く。
+  function drawSlitNormal(ctx, size) {
+    ctx.clearRect(0, 0, size, size);
+    ctx.fillStyle = '#ff3b30';
+    ctx.fillRect(size * 0.1, size * 0.46, size * 0.8, size * 0.08);
+  }
+  function drawSlitExcited(ctx, size) {
+    ctx.clearRect(0, 0, size, size);
+    ctx.fillStyle = '#ff6a3b';
+    ctx.save();
+    ctx.translate(size * 0.5, size * 0.5);
+    ctx.rotate(-0.12);
+    ctx.fillRect(-size * 0.42, -size * 0.05, size * 0.84, size * 0.1);
+    ctx.restore();
+  }
+  function drawSlitDizzy(ctx, size) {
+    ctx.clearRect(0, 0, size, size);
+    ctx.strokeStyle = '#ff3b30';
+    ctx.lineWidth = size * 0.08;
+    ctx.beginPath();
+    ctx.moveTo(size * 0.1, size * 0.5);
+    ctx.quadraticCurveTo(size * 0.3, size * 0.35, size * 0.5, size * 0.5);
+    ctx.quadraticCurveTo(size * 0.7, size * 0.65, size * 0.9, size * 0.5);
+    ctx.stroke();
+  }
+  function drawSlitJoy(ctx, size) {
+    ctx.clearRect(0, 0, size, size);
+    ctx.strokeStyle = '#ff3b30';
+    ctx.lineWidth = size * 0.09;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.arc(size * 0.5, size * 0.3, size * 0.34, 0.1 * Math.PI, 0.55 * Math.PI);
+    ctx.stroke();
+  }
 
   const MOUTH_DRAWERS = {
     [EXPR.NORMAL]: drawMouthNormal,
@@ -230,42 +248,67 @@
     [EXPR.DIZZY]: drawMouthDizzy,
     [EXPR.JOY]: drawMouthJoy,
   };
+  const SLIT_DRAWERS = {
+    [EXPR.NORMAL]: drawSlitNormal,
+    [EXPR.EXCITED]: drawSlitExcited,
+    [EXPR.DIZZY]: drawSlitDizzy,
+    [EXPR.JOY]: drawSlitJoy,
+  };
 
-  // キャラごとの4表情ぶん口プレートを1枚のプレーンメッシュ+テクスチャ差替(4種)で用意。
-  // 4枚別メッシュをvisible切替する方式(GPU負荷極小、テクスチャは共有可能なので使い回す)。
-  const mouthTexCache = {};
-  function getMouthTexture(expr) {
-    if (mouthTexCache[expr]) return mouthTexCache[expr];
+  // 毎フレームのテクスチャ生成を禁止するため、build()時に4表情ぶんの口/スリットテクスチャを
+  // 事前生成してMeshに割り当て、animate()ではvisible切替のみ行う(テクスチャはキャッシュ共有)。
+  const texCache = {};
+  function getExprTexture(bank, drawers, expr) {
+    const key = bank + '_' + expr;
+    if (texCache[key]) return texCache[key];
     const size = 64;
     const cv = makeCanvas(size), ctx = cv.getContext('2d');
-    MOUTH_DRAWERS[expr](ctx, size);
+    drawers[expr](ctx, size);
     const tex = toTexture(cv);
-    mouthTexCache[expr] = tex;
+    texCache[key] = tex;
     return tex;
   }
 
   function addMouthSet(parent, y, z, w, h) {
     const group = new THREE.Group();
     group.position.set(0, y, z);
-    const planeMat = {};
     const meshes = {};
     for (const expr of Object.keys(MOUTH_DRAWERS)) {
-      const m = new THREE.MeshBasicMaterial({ map: getMouthTexture(expr), transparent: true, depthWrite: false });
+      const m = new THREE.MeshBasicMaterial({ map: getExprTexture('mouth', MOUTH_DRAWERS, expr), transparent: true, depthWrite: false });
       const plane = new THREE.Mesh(new THREE.PlaneGeometry(w, h), m);
       plane.visible = expr === EXPR.NORMAL;
       plane.name = 'mouth_' + expr;
       group.add(plane);
-      planeMat[expr] = m;
       meshes[expr] = plane;
     }
     parent.add(group);
     return meshes; // { normal: mesh, excited: mesh, dizzy: mesh, joy: mesh }
   }
 
+  // ノワール卿専用: 兜スリットの発光表情セット(mouthsと同じ契約=setExprで共用)
+  function addSlitSet(parent, y, z, w, h) {
+    const group = new THREE.Group();
+    group.position.set(0, y, z);
+    const meshes = {};
+    for (const expr of Object.keys(SLIT_DRAWERS)) {
+      const m = new THREE.MeshBasicMaterial({
+        map: getExprTexture('slit', SLIT_DRAWERS, expr), transparent: true, depthWrite: false,
+        color: 0xffffff,
+      });
+      const plane = new THREE.Mesh(new THREE.PlaneGeometry(w, h), m);
+      plane.visible = expr === EXPR.NORMAL;
+      plane.name = 'slit_' + expr;
+      group.add(plane);
+      meshes[expr] = plane;
+    }
+    parent.add(group);
+    return meshes;
+  }
+
   // ---- 共通顔パーツ(白目+虹彩+ハイライトの重ね目) ----
   function addEyes(parent, y, z, spacing, eyeR, irisHex) {
     const whiteMat = mat(C_WHITE);
-    const irisMat = mat(irisHex || C_IRIS.default);
+    const irisMat = mat(irisHex || 0x3a2a20);
     const hiMat = mat(C_WHITE);
     const eyes = { left: null, right: null };
     for (const side of [-1, 1]) {
@@ -286,23 +329,13 @@
     return eyes;
   }
 
-  function addBlush(parent, y, z, spacing, r) {
-    const blushMat = mat(C_BLUSH, { transparent: true, opacity: 0.7 });
-    for (const side of [-1, 1]) {
-      const b = new THREE.Mesh(new THREE.SphereGeometry(r, 8, 6, 0, Math.PI * 2, 0, Math.PI / 2), blushMat);
-      b.position.set(side * spacing, y, z);
-      b.rotation.x = -Math.PI / 2;
-      b.lookAt(new THREE.Vector3(side * spacing, y, z + 1));
-      parent.add(b);
-    }
-  }
-
   // 腕: 名前付きノード(pivotで肩位置に置き、先端に腕メッシュをぶら下げてアニメで回転させる)
-  function addArm(parent, x, y, z, len, r, colorHex, side) {
+  function addArm(parent, x, y, z, len, r, colorHex, side, matFn) {
     const pivot = new THREE.Group();
     pivot.position.set(x, y, z);
     pivot.name = 'arm_' + (side === -1 ? 'L' : 'R') + '_pivot';
-    const armMesh = new THREE.Mesh(new THREE.CapsuleGeometry(r, len, 4, 8), Game.mats.matte(colorHex));
+    const useMat = (matFn || Game.mats.matte)(colorHex);
+    const armMesh = new THREE.Mesh(new THREE.CapsuleGeometry(r, len, 4, 8), useMat);
     armMesh.rotation.z = Math.PI / 2 * (side || 1) * 0.55;
     armMesh.position.set(side * len * 0.35, -len * 0.15, 0);
     armMesh.castShadow = true;
@@ -311,23 +344,24 @@
     return pivot;
   }
 
-  function addLeg(parent, x, y, colorHex) {
-    const g = new THREE.Mesh(new THREE.CapsuleGeometry(0.09, 0.22, 4, 8), Game.mats.matte(colorHex));
+  function addLeg(parent, x, y, colorHex, matFn) {
+    const useMat = (matFn || Game.mats.matte)(colorHex);
+    const g = new THREE.Mesh(new THREE.CapsuleGeometry(0.09, 0.22, 4, 8), useMat);
     g.position.set(x, y, 0.02);
     g.castShadow = true;
     parent.add(g);
     return g;
   }
 
-  // ---- 専用アクセサリー(シルエット強化。全てオリジナル意匠) ----
-  // レーシングゴーグル(マカロン)
-  function addGoggles(parent, y, z, r) {
+  // ==================== 専用アクセサリー(全てオリジナル意匠) ====================
+  // レーシングゴーグル(クルム)
+  function addGoggles(parent, y, z, r, lensHex) {
     const strapMat = Game.mats.matte(0x333333);
     const strap = new THREE.Mesh(new THREE.TorusGeometry(r * 1.55, r * 0.12, 6, 16, Math.PI), strapMat);
     strap.rotation.z = Math.PI;
     strap.position.set(0, y + r * 0.2, z - r * 0.5);
     parent.add(strap);
-    const lensMat = Game.mats.glass(0x69d1ff, 0.55);
+    const lensMat = Game.mats.glass(lensHex || 0x69d1ff, 0.55);
     const frameMat = Game.mats.metal(0xdedede);
     for (const side of [-1, 1]) {
       const frame = new THREE.Mesh(new THREE.TorusGeometry(r * 0.9, r * 0.14, 8, 14), frameMat);
@@ -337,502 +371,565 @@
       lens.position.set(side * r * 1.05, y, z + r * 0.08);
       parent.add(lens);
     }
-    return strap;
   }
 
-  // 後ろ向きスポーツキャップ(ドーナ)
-  function addCapBack(parent, y, colorHex) {
+  // つばの短いレーシングキャップ+スカーフ(クルム)
+  function addCapFront(parent, y, colorHex) {
     const capMat = Game.mats.matte(colorHex);
     const dome = new THREE.Mesh(new THREE.SphereGeometry(0.27, SEG_MID, SEG_LOW, 0, Math.PI * 2, 0, Math.PI * 0.55), capMat);
     dome.position.y = y;
     dome.castShadow = true;
     parent.add(dome);
     const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.03, 12, 1, false, 0, Math.PI), capMat);
-    brim.position.set(0, y - 0.02, -0.24); // 後ろ向き = -Z側に鍔
+    brim.position.set(0, y - 0.02, 0.24);
     brim.rotation.x = Math.PI / 2;
     parent.add(brim);
-    const button = new THREE.Mesh(new THREE.SphereGeometry(0.025, 6, 6), Game.mats.metal());
-    button.position.set(0, y + 0.26, 0);
-    parent.add(button);
   }
-
-  // 蝶ネクタイ(タプリン)
-  function addBowtie(parent, x, y, z, colorHex) {
-    const bowMat = Game.mats.paint(colorHex);
-    for (const side of [-1, 1]) {
-      const wing = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.1, 4), bowMat);
-      wing.position.set(x + side * 0.06, y, z);
-      wing.rotation.z = side * Math.PI / 2;
-      wing.rotation.y = Math.PI / 4;
-      parent.add(wing);
-    }
-    const knot = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 8), Game.mats.metal(0xffe066));
-    knot.position.set(x, y, z);
-    parent.add(knot);
-  }
-
-  // サングラス(ソフクリン)
-  function addSunglasses(parent, y, z, r) {
-    const frameMat = Game.mats.metal(0x2a2a2a);
-    const lensMat = Game.mats.glass(0x2a2a2a, 0.85);
-    const bridge = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.02, 0.02), frameMat);
-    bridge.position.set(0, y, z + r * 0.9);
-    parent.add(bridge);
-    for (const side of [-1, 1]) {
-      const lens = new THREE.Mesh(new THREE.CircleGeometry(r * 0.85, 12), lensMat);
-      lens.position.set(side * r * 1.0, y, z + r * 0.92);
-      parent.add(lens);
-      const frame = new THREE.Mesh(new THREE.TorusGeometry(r * 0.85, 0.015, 6, 14), frameMat);
-      frame.position.set(side * r * 1.0, y, z + r * 0.9);
-      parent.add(frame);
-    }
-  }
-
-  // マフラー/スカーフ(ソーダ・シュワリ)
   function addScarf(parent, y, z, colorHex) {
     const scarfMat = Game.mats.matte(colorHex);
-    const wrap = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.07, 8, SEG_MID), scarfMat);
+    const wrap = new THREE.Mesh(new THREE.TorusGeometry(0.26, 0.06, 8, SEG_MID), scarfMat);
     wrap.rotation.x = Math.PI / 2;
     wrap.position.set(0, y, z);
     wrap.castShadow = true;
     parent.add(wrap);
-    const tail = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.32, 0.04), scarfMat);
-    tail.position.set(0.16, y - 0.22, z + 0.1);
-    tail.rotation.z = 0.25;
+    const tail = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.34, 0.04), scarfMat);
+    tail.position.set(0.16, y - 0.22, z + 0.06);
+    tail.rotation.z = 0.3;
     tail.castShadow = true;
     parent.add(tail);
   }
 
-  // リーダーの飾緒(サッシュ)+丸メガネ(ワッフル)
-  function addSash(parent, y0, y1, colorHex) {
-    const sashMat = Game.mats.paint(colorHex);
-    const sash = new THREE.Mesh(new THREE.BoxGeometry(0.14, y0 - y1, 0.42), sashMat);
-    sash.position.set(0.14, (y0 + y1) / 2, 0);
-    sash.rotation.z = 0.28;
-    sash.castShadow = true;
-    parent.add(sash);
-    const medal = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.02, 12), Game.mats.metal(0xd4af37));
-    medal.position.set(0.1, y1 + 0.02, 0.22);
-    medal.rotation.x = Math.PI / 2;
-    parent.add(medal);
-  }
-  function addRoundGlasses(parent, y, z, r) {
-    const frameMat = Game.mats.metal(0xd4af37);
-    const lensMat = Game.mats.glass(0xffffff, 0.25);
-    const bridge = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.015, 0.015), frameMat);
-    bridge.position.set(0, y, z + r * 0.95);
-    parent.add(bridge);
+  // 飛行帽ゴーグル(ルポ)
+  function addFlightCap(parent, y, r, colorHex) {
+    const capMat = Game.mats.matte(colorHex);
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(r, SEG_MID, SEG_LOW, 0, Math.PI * 2, 0, Math.PI * 0.62), capMat);
+    cap.position.y = y;
+    cap.castShadow = true;
+    parent.add(cap);
     for (const side of [-1, 1]) {
-      const frame = new THREE.Mesh(new THREE.TorusGeometry(r * 0.7, 0.014, 6, 14), frameMat);
-      frame.position.set(side * r * 0.85, y, z + r * 0.92);
-      parent.add(frame);
-      const lens = new THREE.Mesh(new THREE.CircleGeometry(r * 0.68, 12), lensMat);
-      lens.position.set(side * r * 0.85, y, z + r * 0.94);
-      parent.add(lens);
+      const ear = new THREE.Mesh(new THREE.SphereGeometry(r * 0.32, 8, 8), capMat);
+      ear.position.set(side * r * 0.75, y - r * 0.35, -r * 0.05);
+      parent.add(ear);
     }
   }
-
-  // フード状の襟巻き(ショコラ・ノワール)
-  function addHoodCollar(parent, y, colorHex) {
-    const hoodMat = Game.mats.matte(colorHex);
-    const collar = new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.06, 8, SEG_MID, Math.PI * 1.4), hoodMat);
-    collar.rotation.x = Math.PI / 2;
-    collar.rotation.z = Math.PI * 0.3;
-    collar.position.y = y;
-    collar.castShadow = true;
-    parent.add(collar);
+  // 肩掛け配達バッグ(ルポ)
+  function addDeliveryBag(parent, y, colorHex) {
+    const bagMat = Game.mats.matte(colorHex);
+    const strapMat = Game.mats.matte(0x7a4a20);
+    const strap = new THREE.Mesh(new THREE.TorusGeometry(0.26, 0.03, 6, 12, Math.PI * 1.1), strapMat);
+    strap.rotation.z = 0.5;
+    strap.position.set(0, y + 0.1, 0);
+    parent.add(strap);
+    const bag = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.24, 0.12), bagMat);
+    bag.position.set(-0.24, y - 0.14, -0.08);
+    bag.rotation.y = 0.3;
+    bag.castShadow = true;
+    parent.add(bag);
+    const flap = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.08, 0.13), Game.mats.matte(0xffffff));
+    flap.position.set(-0.24, y - 0.03, -0.08);
+    flap.rotation.y = 0.3;
+    parent.add(flap);
+  }
+  // 大きな尻尾(ルポ)
+  function addFoxTail(parent, y, colorHex) {
+    const tailMat = new THREE.MeshLambertMaterial({ map: texFoxFur(64) });
+    const tail = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.5, SEG_MID), tailMat);
+    tail.position.set(0, y, -0.32);
+    tail.rotation.x = Math.PI / 2.1;
+    tail.castShadow = true;
+    parent.add(tail);
+    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), Game.mats.matte(0xffffff));
+    tip.position.set(0, y - 0.02, -0.56);
+    parent.add(tip);
+    return tail;
   }
 
-  // ロングマフラー(バウム・ロール)
-  function addLongMuffler(parent, y, colorHex) {
-    const mufMat = Game.mats.matte(colorHex);
-    const wrap = new THREE.Mesh(new THREE.TorusGeometry(0.29, 0.055, 8, SEG_MID), mufMat);
+  // 岩の拳(ドンガ)
+  function addRockFist(parent, x, y, z, r, colorHex) {
+    const fistMat = new THREE.MeshLambertMaterial({ map: texCaramelRock(64) });
+    const fist = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 0), fistMat);
+    fist.position.set(x, y, z);
+    fist.castShadow = true;
+    parent.add(fist);
+    return fist;
+  }
+
+  // 王冠(グミラス王)
+  function addCrown(parent, y, r) {
+    const crownMat = Game.mats.metal(0xd4af37);
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 1.05, r * 0.5, SEG_MID), crownMat);
+    base.position.y = y;
+    base.castShadow = true;
+    parent.add(base);
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2;
+      const spike = new THREE.Mesh(new THREE.ConeGeometry(r * 0.16, r * 0.4, 6), crownMat);
+      spike.position.set(Math.cos(a) * r * 0.82, y + r * 0.45, Math.sin(a) * r * 0.82);
+      parent.add(spike);
+    }
+    const jewel = new THREE.Mesh(new THREE.SphereGeometry(r * 0.14, 8, 8), Game.mats.glow(0xff3b6e, 1.0));
+    jewel.position.set(0, y + r * 0.15, r * 0.95);
+    parent.add(jewel);
+  }
+  // マント(グミラス王)
+  function addCape(parent, y0, y1, colorHex) {
+    const capeMat = Game.mats.matte(colorHex);
+    const cape = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.5, y0 - y1, SEG_MID, 1, true, Math.PI * 0.3, Math.PI * 1.4), capeMat);
+    cape.position.set(0, (y0 + y1) / 2, -0.12);
+    cape.rotation.y = Math.PI;
+    cape.castShadow = true;
+    parent.add(cape);
+  }
+
+  // 兜(ノワール卿)
+  function addHelm(parent, y, r, colorHex) {
+    const helmMat = new THREE.MeshLambertMaterial({ map: texBitterArmor(64) });
+    const helm = new THREE.Mesh(new THREE.SphereGeometry(r, SEG_MID, SEG_MID), helmMat);
+    helm.castShadow = true;
+    helm.position.y = y;
+    parent.add(helm);
+    const crest = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.24, 0.05), Game.mats.metal(0x9a1c1c));
+    crest.position.set(0, y + r * 1.05, -0.02);
+    parent.add(crest);
+    return helm;
+  }
+
+  // 年輪の口ヒゲ+モノクル+革手袋(バウム翁)
+  function addMustache(parent, y, z, colorHex) {
+    const m = Game.mats.matte(colorHex);
+    for (const side of [-1, 1]) {
+      const wisp = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.22, 6), m);
+      wisp.position.set(side * 0.1, y, z);
+      wisp.rotation.z = side * Math.PI / 2.3;
+      wisp.rotation.x = 0.2;
+      parent.add(wisp);
+    }
+  }
+  function addMonocle(parent, x, y, z, r) {
+    const frameMat = Game.mats.metal(0xd4af37);
+    const lensMat = Game.mats.glass(0xffffff, 0.3);
+    const frame = new THREE.Mesh(new THREE.TorusGeometry(r, 0.016, 6, 14), frameMat);
+    frame.position.set(x, y, z);
+    parent.add(frame);
+    const lens = new THREE.Mesh(new THREE.CircleGeometry(r * 0.85, 12), lensMat);
+    lens.position.set(x, y, z + 0.01);
+    parent.add(lens);
+    const chain = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.006, 4, 8, Math.PI), frameMat);
+    chain.position.set(x + 0.05, y - 0.12, z - 0.02);
+    chain.rotation.z = Math.PI;
+    parent.add(chain);
+  }
+  function addGloveHand(parent, x, y, z, colorHex) {
+    const g = new THREE.Mesh(new THREE.SphereGeometry(0.09, SEG_LOW, SEG_LOW), Game.mats.matte(colorHex));
+    g.position.set(x, y, z);
+    g.castShadow = true;
+    parent.add(g);
+    return g;
+  }
+
+  // アイシングの隈取り(ジンジャ)+ミントの帯
+  function addIcingMarks(parent, y, z, colorHex) {
+    const icingMat = Game.mats.matte(colorHex);
+    for (const side of [-1, 1]) {
+      const mark = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.02, 6, 10, Math.PI * 0.9), icingMat);
+      mark.position.set(side * 0.13, y, z);
+      mark.rotation.y = Math.PI / 2;
+      mark.rotation.z = side > 0 ? Math.PI * 0.15 : Math.PI * 0.85;
+      parent.add(mark);
+    }
+  }
+  function addNinjaSash(parent, y, colorHex) {
+    const sashMat = Game.mats.matte(colorHex);
+    const wrap = new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.045, 6, SEG_MID), sashMat);
     wrap.rotation.x = Math.PI / 2;
     wrap.position.y = y;
     wrap.castShadow = true;
     parent.add(wrap);
-    for (let i = 0; i < 2; i++) {
-      const tail = new THREE.Mesh(new THREE.CapsuleGeometry(0.045, 0.4, 4, 6), mufMat);
-      tail.position.set((i === 0 ? -0.12 : 0.16), y - 0.32, -0.12);
-      tail.rotation.z = i === 0 ? 0.3 : -0.15;
-      tail.rotation.x = 0.2;
-      tail.castShadow = true;
-      parent.add(tail);
-    }
+    const tailKnot = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.2, 0.03), sashMat);
+    tailKnot.position.set(0.14, y - 0.16, -0.14);
+    tailKnot.rotation.z = -0.3;
+    parent.add(tailKnot);
   }
 
-  // ヘッドバンド+パワーグローブ(ボンボン・キャノン)
-  function addHeadband(parent, y, r, colorHex) {
-    const bandMat = Game.mats.paint(colorHex);
-    const band = new THREE.Mesh(new THREE.TorusGeometry(r * 1.02, 0.035, 6, SEG_MID, Math.PI * 1.7), bandMat);
-    band.rotation.x = Math.PI / 2;
-    band.rotation.z = Math.PI * 0.15;
-    band.position.y = y;
-    parent.add(band);
-  }
-  function addPowerGlove(parent, x, y, z, colorHex) {
-    const glove = new THREE.Mesh(new THREE.SphereGeometry(0.1, SEG_LOW, SEG_LOW), Game.mats.matte(colorHex));
-    glove.position.set(x, y, z);
-    glove.castShadow = true;
-    parent.add(glove);
-    return glove;
+  // 半透明の雫状下半身(シズク)
+  function buildDropletBase(parent, colorHex) {
+    const dropMat = Game.mats.glass(colorHex, 0.55);
+    const drop = new THREE.Mesh(new THREE.SphereGeometry(0.3, SEG_MID, SEG_MID), dropMat);
+    drop.scale.set(1, 1.35, 1);
+    drop.position.y = 0.28;
+    drop.castShadow = true;
+    parent.add(drop);
+    return drop;
   }
 
-  // ==================== キャラ定義(維持: id/name/motif/personality/color/stats) ====================
+  // LEDツインアイ(ヴォルト8)/アンテナ
+  function addAntenna(parent, y, colorHex) {
+    const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.22, 6), Game.mats.metal());
+    stalk.position.y = y;
+    parent.add(stalk);
+    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 8), Game.mats.glow(colorHex, 1.6));
+    tip.position.y = y + 0.13;
+    parent.add(tip);
+  }
+
+  // ==================== キャラ定義(DESIGN.md 2-v3表と完全一致) ====================
   const list = [
-    { id: 'macaron', name: 'マカロン・ププル', motif: 'マカロン', personality: 'おっとり癒し系',
-      color: 0xffb0cc, stats: { speed: 2, accel: 5, handling: 4, weight: 2 } },
-    { id: 'donut', name: 'ドーナ・リング', motif: 'ドーナツ', personality: '陽気なお調子者',
-      color: 0xe08a4c, stats: { speed: 2, accel: 4, handling: 5, weight: 1 } },
-    { id: 'taplin', name: 'タプリン', motif: 'プリン', personality: '臆病だが負けず嫌い',
-      color: 0xffd23f, stats: { speed: 3, accel: 4, handling: 4, weight: 2 } },
-    { id: 'sofukurin', name: 'ソフクリン', motif: 'ソフトクリーム', personality: 'クールだが根は熱血',
-      color: 0xbfe8ff, stats: { speed: 3, accel: 3, handling: 4, weight: 2 } },
-    { id: 'sodaShuwari', name: 'ソーダ・シュワリ', motif: 'ラムネソーダ', personality: '泡のようにポジティブ',
-      color: 0x7fe0c0, stats: { speed: 3, accel: 3, handling: 3, weight: 3 } },
-    { id: 'waffle', name: 'ワッフル・グリッド', motif: 'ワッフル', personality: '几帳面なリーダー',
-      color: 0xf2b23a, stats: { speed: 3, accel: 2, handling: 3, weight: 4 } },
-    { id: 'chocolat', name: 'ショコラ・ノワール', motif: '板チョコ', personality: '無口な策士',
-      color: 0x4a2b1c, stats: { speed: 4, accel: 2, handling: 2, weight: 4 } },
-    { id: 'baum', name: 'バウム・ロール', motif: 'バウムクーヘン', personality: '物静かな年長者',
-      color: 0xc9925a, stats: { speed: 4, accel: 2, handling: 2, weight: 5 } },
-    { id: 'bonbon', name: 'ボンボン・キャノン', motif: '金平糖', personality: '破天荒なパワー型',
-      color: 0xff5d7a, stats: { speed: 5, accel: 1, handling: 1, weight: 5 } },
+    { id: 'kurumu', name: 'クルム', motif: 'パン種の妖精。クリームの前髪、キャップ+ゴーグル、赤スカーフ', personality: '主人公気質の元気な小型人外',
+      color: 0xe8412f, stats: { speed: 3, accel: 3, handling: 3, weight: 3 } },
+    { id: 'rupo', name: 'ルポ', motif: '宅配キツネ。飛行帽ゴーグル、肩掛け配達バッグ、大きな尻尾', personality: '軽快でフレンドリーな配達屋',
+      color: 0xff8c2b, stats: { speed: 3, accel: 4, handling: 4, weight: 1 } },
+    { id: 'donga', name: 'ドンガ', motif: 'キャラメル岩のゴーレム。ひび割れから溶岩色の光、岩の拳', personality: '寡黙で圧倒的なパワー型',
+      color: 0x8a7362, stats: { speed: 5, accel: 1, handling: 1, weight: 5 } },
+    { id: 'volt8', name: 'ヴォルト8', motif: 'ワッフル工場製レースロボ。ツインLEDアイ、アンテナ、下半身はマシンと一体化', personality: '合理的で無表情、時々ユーモラス',
+      color: 0xb9bec9, stats: { speed: 4, accel: 3, handling: 2, weight: 3 } },
+    { id: 'shizuku', name: 'シズク', motif: 'シロップの水精霊。半透明ガラス質の体、オーロラ色の髪、浮遊', personality: '気まぐれで浮遊感のあるマイペース屋',
+      color: 0x5ec8f0, stats: { speed: 2, accel: 4, handling: 5, weight: 1 } },
+    { id: 'gumiras', name: 'グミラス王', motif: 'グミの王。ゼリー質の恰幅ある体、金の王冠、赤マント、余裕の笑み', personality: '陽気で余裕たっぷりの王様',
+      color: 0x9a4fd6, stats: { speed: 4, accel: 2, handling: 2, weight: 4 } },
+    { id: 'noir', name: 'ノワール卿', motif: 'ビターカカオの騎士。黒鎧、兜のスリットから赤い目が光る、不敵', personality: '寡黙不敵なライバル',
+      color: 0x241512, stats: { speed: 5, accel: 2, handling: 3, weight: 3 } },
+    { id: 'baumjii', name: 'バウム翁', motif: '年輪の樹精の長老。クリームの口ヒゲ、モノクル、革手袋', personality: '穏やかで職人気質のベテラン',
+      color: 0xa9773f, stats: { speed: 3, accel: 2, handling: 4, weight: 4 } },
+    { id: 'ginja', name: 'ジンジャ', motif: 'ジンジャークッキーの忍者。アイシングの隈取り、ミントの帯、ニヤリ顔', personality: '身軽なトリックスター',
+      color: 0xa86a34, stats: { speed: 2, accel: 5, handling: 4, weight: 1 } },
   ];
 
   // ==================== ビルダー群 ====================
   // 各ビルダーは Group を返す。userData.parts に以下を積む(animate()が参照):
   //  { armL, armR, mouths:{normal,excited,dizzy,joy}, eyeL, eyeR, headY(baseY), bodyRoot }
+  // (ノワール卿はmouthsの代わりにslitsを持つ。setExprは両方に対応)
 
-  function buildMacaron() {
+  // 1) クルム: パン種の妖精。小柄(身長目安1.1)。赤×クリーム、キャップ+ゴーグル+赤スカーフ
+  function buildKurumu() {
     const g = new THREE.Group();
-    const parts = { extras: [] };
-    const shellTex = texMacaronShell(64, '#ffb0cc');
-    const shellMat = new THREE.MeshLambertMaterial({ map: shellTex });
-    const creamMat = Game.mats.matte(0xfff6e0);
-    // 下の殻(横に潰れた球)
-    const bottom = new THREE.Mesh(new THREE.SphereGeometry(0.42, SEG_MID, SEG_LOW), shellMat);
-    bottom.scale.set(1, 0.55, 1);
-    bottom.position.y = 0.52;
-    bottom.castShadow = true;
-    g.add(bottom);
-    // クリーム(円柱)
-    const cream = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.14, SEG_MID), creamMat);
-    cream.position.y = 0.72;
-    cream.castShadow = true;
-    g.add(cream);
-    // 上の殻
-    const top = new THREE.Mesh(new THREE.SphereGeometry(0.42, SEG_MID, SEG_LOW), shellMat);
-    top.scale.set(1, 0.5, 1);
-    top.position.y = 0.95;
-    top.castShadow = true;
-    g.add(top);
-    // 頬
-    addBlush(g, 0.78, 0.32, 0.28, 0.09);
-    // 目・口
-    const eyes = addEyes(g, 0.85, 0.36, 0.16, 0.075, 0x6b3f2a);
-    const mouths = addMouthSet(g, 0.72, 0.4, 0.16, 0.12);
-    // レーシングゴーグル(シルエット強化アクセサリー)
-    addGoggles(g, 0.85, 0.4, 0.09);
-    // リボン(トーラス)
-    const ribbonMat = Game.mats.paint(0xffe066);
-    const ribbon = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.035, 6, 10), ribbonMat);
-    ribbon.position.set(0, 1.28, 0);
-    ribbon.rotation.x = Math.PI / 2;
-    ribbon.castShadow = true;
-    g.add(ribbon);
-    const ribbonCenter = new THREE.Mesh(new THREE.SphereGeometry(0.045, 6, 6), ribbonMat);
-    ribbonCenter.position.set(0, 1.28, 0);
-    g.add(ribbonCenter);
-    // 短い手足
-    const armL = addArm(g, -0.4, 0.68, 0.05, 0.18, 0.08, 0xffb0cc, -1);
-    const armR = addArm(g, 0.4, 0.68, 0.05, 0.18, 0.08, 0xffb0cc, 1);
-    addLeg(g, -0.15, 0.14, 0xffffff);
-    addLeg(g, 0.15, 0.14, 0xffffff);
+    const doughMat = new THREE.MeshLambertMaterial({ map: texCreamSwirl(64) });
+    const bodyMat = Game.mats.matte(0xe8412f);
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.34, SEG_MID, SEG_LOW), bodyMat);
+    body.scale.set(1, 1.15, 0.95);
+    body.position.y = 0.42;
+    body.castShadow = true;
+    g.add(body);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.26, SEG_MID, SEG_LOW), doughMat);
+    head.position.y = 0.82;
+    head.castShadow = true;
+    g.add(head);
+    const eyes = addEyes(g, 0.85, 0.22, 0.1, 0.06, 0x4a2a1c);
+    const mouths = addMouthSet(g, 0.75, 0.25, 0.12, 0.09);
+    addGoggles(g, 0.85, 0.24, 0.08, 0x69d1ff);
+    addCapFront(g, 1.0, 0xfff6e0);
+    addScarf(g, 0.6, 0.1, 0xe8412f);
+    const armL = addArm(g, -0.34, 0.52, 0.04, 0.16, 0.06, 0xe8412f, -1);
+    const armR = addArm(g, 0.34, 0.52, 0.04, 0.16, 0.06, 0xe8412f, 1);
+    addLeg(g, -0.13, 0.13, 0xfff6e0);
+    addLeg(g, 0.13, 0.13, 0xfff6e0);
     g.userData.parts = { armL, armR, eyeL: eyes.left, eyeR: eyes.right, mouths, headY: 0.85, bodyRoot: g };
     return g;
   }
 
-  function buildDonut() {
+  // 2) ルポ: 宅配キツネ。中型、軽量。オレンジ×白、飛行帽+ゴーグル+配達バッグ+尻尾
+  function buildRupo() {
     const g = new THREE.Group();
-    const tex = texDonut(128);
-    const bodyMat = new THREE.MeshLambertMaterial({ map: tex });
-    const body = new THREE.Mesh(new THREE.TorusGeometry(0.4, 0.22, SEG_MID, 16), bodyMat);
-    body.rotation.x = Math.PI / 2; // 縦置き(輪が正面向き+Z観察可)
-    body.position.y = 0.62;
+    const furMat = new THREE.MeshLambertMaterial({ map: texFoxFur(64) });
+    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.26, 0.42, 4, SEG_MID), furMat);
+    body.position.y = 0.55;
     body.castShadow = true;
     g.add(body);
-    // 顔(穴の中の球)
-    const face = new THREE.Mesh(new THREE.SphereGeometry(0.24, SEG_MID, SEG_LOW), Game.mats.matte(0xfff2e0));
-    face.position.set(0, 0.62, 0.02);
-    face.castShadow = true;
-    g.add(face);
-    const eyes = addEyes(g, 0.66, 0.24, 0.1, 0.055, 0x5a2f1c);
-    const mouths = addMouthSet(g, 0.56, 0.26, 0.12, 0.09);
-    addBlush(g, 0.58, 0.2, 0.17, 0.06);
-    // 後ろ向きキャップ(シルエット強化)
-    addCapBack(g, 0.82, 0xffb3de);
-    const armL = addArm(g, -0.42, 0.5, 0.05, 0.16, 0.07, 0xe08a4c, -1);
-    const armR = addArm(g, 0.42, 0.5, 0.05, 0.16, 0.07, 0xe08a4c, 1);
-    addLeg(g, -0.15, 0.14, 0xe08a4c);
-    addLeg(g, 0.15, 0.14, 0xe08a4c);
-    g.userData.parts = { armL, armR, eyeL: eyes.left, eyeR: eyes.right, mouths, headY: 0.66, bodyRoot: g };
-    return g;
-  }
-
-  function buildTaplin() {
-    const g = new THREE.Group();
-    const bodyMat = Game.mats.matte(0xffd23f);
-    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.4, 0.7, SEG_MID), bodyMat);
-    body.position.y = 0.45;
-    body.castShadow = true;
-    g.add(body);
-    // とろけるキャラメル(平たい球、glassで艶を出す)
-    const caramelMat = Game.mats.glass(0xc98a3a, 0.85);
-    const caramel = new THREE.Mesh(new THREE.SphereGeometry(0.26, SEG_MID, SEG_LOW), caramelMat);
-    caramel.scale.set(1.1, 0.4, 1.1);
-    caramel.position.y = 0.82;
-    caramel.castShadow = true;
-    g.add(caramel);
-    // 皿(薄円柱)
-    const plateMat = Game.mats.paint(0xffffff);
-    const plate = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.06, SEG_MID), plateMat);
-    plate.position.y = 0.06;
-    plate.castShadow = true;
-    g.add(plate);
-    const eyes = addEyes(g, 0.55, 0.36, 0.13, 0.07, 0x8a5a1c);
-    const mouths = addMouthSet(g, 0.44, 0.39, 0.14, 0.1);
-    addBlush(g, 0.47, 0.33, 0.22, 0.07);
-    // 蝶ネクタイ(シルエット強化)
-    addBowtie(g, 0, 0.36, 0.42, 0xff5d7a);
-    const armL = addArm(g, -0.36, 0.42, 0.05, 0.16, 0.07, 0xffd23f, -1);
-    const armR = addArm(g, 0.36, 0.42, 0.05, 0.16, 0.07, 0xffd23f, 1);
-    g.userData.parts = { armL, armR, eyeL: eyes.left, eyeR: eyes.right, mouths, headY: 0.55, bodyRoot: g };
-    return g;
-  }
-
-  function buildSofukurin() {
-    const g = new THREE.Group();
-    const swirlMat = Game.mats.matte(0xf3fbff);
-    const marbleMat = Game.mats.matte(0xbfe8ff);
-    // 下半身: 格子コーン(逆円錐)
-    const coneTex = texWaffle(64);
-    const cone = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.32, 0.45, SEG_MID),
-      new THREE.MeshLambertMaterial({ map: coneTex, color: 0xffe0a0 }));
-    cone.position.y = 0.23;
-    cone.castShadow = true;
-    g.add(cone);
-    // 渦巻き状の3段(白×水色マーブル交互)
-    const sizes = [0.3, 0.24, 0.18];
-    let y = 0.5;
-    for (let i = 0; i < 3; i++) {
-      const m = i % 2 === 0 ? swirlMat : marbleMat;
-      const seg = new THREE.Mesh(new THREE.ConeGeometry(sizes[i], 0.28, SEG_MID), m);
-      seg.position.y = y + 0.14;
-      seg.castShadow = true;
-      g.add(seg);
-      y += 0.22;
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.24, SEG_MID, SEG_LOW), furMat);
+    head.position.y = 1.02;
+    head.castShadow = true;
+    g.add(head);
+    // キツネの鼻先(円錐)
+    const muzzle = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.2, SEG_LOW), Game.mats.matte(0xfff2e0));
+    muzzle.position.set(0, 0.98, 0.24);
+    muzzle.rotation.x = Math.PI / 2;
+    muzzle.castShadow = true;
+    g.add(muzzle);
+    // 三角の耳
+    for (const side of [-1, 1]) {
+      const ear = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.2, 6), Game.mats.matte(0xff8c2b));
+      ear.position.set(side * 0.14, 1.24, -0.02);
+      ear.castShadow = true;
+      g.add(ear);
     }
-    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 8), marbleMat);
-    tip.position.y = y + 0.18;
-    g.add(tip);
-    const eyes = addEyes(g, y - 0.05, 0.16, 0.1, 0.065, 0x2c6a8c);
-    const mouths = addMouthSet(g, y - 0.16, 0.19, 0.12, 0.09);
-    addBlush(g, y - 0.13, 0.14, 0.16, 0.055);
-    // サングラス(クールな性格を表現するシルエット強化)
-    addSunglasses(g, y - 0.05, 0.14, 0.07);
-    const armL = addArm(g, -0.26, y - 0.15, 0.02, 0.16, 0.06, 0xbfe8ff, -1);
-    const armR = addArm(g, 0.26, y - 0.15, 0.02, 0.16, 0.06, 0xbfe8ff, 1);
-    g.userData.parts = { armL, armR, eyeL: eyes.left, eyeR: eyes.right, mouths, headY: y - 0.05, bodyRoot: g };
+    const eyes = addEyes(g, 1.02, 0.22, 0.09, 0.055, 0x3a2a1c);
+    const mouths = addMouthSet(g, 0.94, 0.28, 0.11, 0.08);
+    addFlightCap(g, 1.16, 0.22, 0x5a3a20);
+    addGoggles(g, 1.02, 0.2, 0.075, 0xffe066);
+    addDeliveryBag(g, 0.68, 0xffffff);
+    const tail = addFoxTail(g, 0.5, 0xff8c2b);
+    const armL = addArm(g, -0.28, 0.56, 0.04, 0.17, 0.06, 0xff8c2b, -1);
+    const armR = addArm(g, 0.28, 0.56, 0.04, 0.17, 0.06, 0xff8c2b, 1);
+    addLeg(g, -0.12, 0.14, 0xffffff);
+    addLeg(g, 0.12, 0.14, 0xffffff);
+    g.userData.parts = { armL, armR, eyeL: eyes.left, eyeR: eyes.right, mouths, headY: 1.02, bodyRoot: g, tail };
     return g;
   }
 
-  function buildSoda() {
+  // 3) ドンガ: キャラメル岩のゴーレム。大柄(身長目安1.6)、重量級。岩グレー×溶岩発光
+  function buildDonga() {
     const g = new THREE.Group();
-    const bodyMat = Game.mats.glass(0x7fe0c0, 0.75);
-    const body = new THREE.Mesh(new THREE.SphereGeometry(0.4, SEG_MID, SEG_MID), bodyMat);
-    body.scale.set(1, 1.15, 1);
-    body.position.y = 0.62;
+    const rockMat = new THREE.MeshLambertMaterial({ map: texCaramelRock(128) });
+    const legL = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 0.4, SEG_MID), rockMat);
+    legL.position.set(-0.2, 0.2, 0);
+    legL.castShadow = true;
+    g.add(legL);
+    const legR = legL.clone();
+    legR.position.x = 0.2;
+    g.add(legR);
+    const body = new THREE.Mesh(new THREE.DodecahedronGeometry(0.42, 0), rockMat);
+    body.scale.set(1, 1.15, 0.9);
+    body.position.y = 0.78;
     body.castShadow = true;
     g.add(body);
-    // ビー玉(頭上の青い小球、metalで硬質な輝き)
-    const marble = new THREE.Mesh(new THREE.SphereGeometry(0.12, SEG_LOW, SEG_LOW), Game.mats.glass(0x3d8bff, 0.9));
-    marble.position.y = 1.08;
-    marble.castShadow = true;
-    g.add(marble);
-    // 泡(白い極小球を数個浮遊)
-    const bubbleMat = Game.mats.glass(0xffffff, 0.8);
-    const bubblePos = [
-      [0.28, 0.9, 0.2], [-0.26, 0.75, -0.22], [0.2, 0.45, 0.3],
-      [-0.22, 0.95, 0.15], [0.05, 0.3, -0.3],
-    ];
+    // ひび割れ発光(体表に埋め込む発光ライン)
+    for (let i = 0; i < 3; i++) {
+      const crack = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.28, 0.02), Game.mats.glow(0xff5a1c, 1.5));
+      crack.position.set((-0.15 + i * 0.15), 0.7 + i * 0.06, 0.36);
+      crack.rotation.z = (i - 1) * 0.3;
+      g.add(crack);
+    }
+    const head = new THREE.Mesh(new THREE.IcosahedronGeometry(0.28, 0), rockMat);
+    head.position.y = 1.32;
+    head.castShadow = true;
+    g.add(head);
+    const eyes = addEyes(g, 1.34, 0.24, 0.12, 0.075, 0xff6a1c);
+    const mouths = addMouthSet(g, 1.2, 0.28, 0.15, 0.1);
+    const armL = addArm(g, -0.5, 0.86, 0.02, 0.26, 0.11, 0x8a7362, -1);
+    const armR = addArm(g, 0.5, 0.86, 0.02, 0.26, 0.11, 0x8a7362, 1);
+    const fistL = addRockFist(g, -0.5 - 0.28 * 0.35, 0.86 - 0.26 * 0.15, 0.02, 0.15, 0x8a7362);
+    const fistR = addRockFist(g, 0.5 + 0.28 * 0.35, 0.86 - 0.26 * 0.15, 0.02, 0.15, 0x8a7362);
+    g.userData.parts = { armL, armR, eyeL: eyes.left, eyeR: eyes.right, mouths, headY: 1.34, bodyRoot: g, fistL, fistR };
+    return g;
+  }
+
+  // 4) ヴォルト8: レースロボ。機械シルエット。**特例: 下半身なし、胴体がシートに直接接続**
+  function buildVolt8() {
+    const g = new THREE.Group();
+    const metalMat = Game.mats.metal(0xb9bec9);
+    const darkMat = Game.mats.matte(0x2c2f36);
+    // 胴体(シートへ直結する土台。座標y=0付近から始まる=脚を作らない)
+    const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.3, 0.55, SEG_MID), metalMat);
+    torso.position.y = 0.4;
+    torso.castShadow = true;
+    g.add(torso);
+    const chestPlate = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.26, 0.12), darkMat);
+    chestPlate.position.set(0, 0.5, 0.2);
+    chestPlate.castShadow = true;
+    g.add(chestPlate);
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, 0.12, SEG_LOW), metalMat);
+    neck.position.y = 0.72;
+    g.add(neck);
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.28, 0.3), metalMat);
+    head.position.y = 0.94;
+    head.castShadow = true;
+    g.add(head);
+    // 顔パネル(つや消し暗色)
+    const facePanel = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.16, 0.02), darkMat);
+    facePanel.position.set(0, 0.94, 0.16);
+    g.add(facePanel);
+    // LEDツインアイ(発光。表情は色/明滅で表現するため4種メッシュをvisible切替)
+    const eyeGeom = new THREE.BoxGeometry(0.06, 0.05, 0.02);
+    const eyeColors = {
+      [EXPR.NORMAL]: 0x4de0ff, [EXPR.EXCITED]: 0xff9a3c, [EXPR.DIZZY]: 0xff3b6e, [EXPR.JOY]: 0x7fff7f,
+    };
+    const ledEyes = {};
+    for (const expr of Object.keys(eyeColors)) {
+      const grp = new THREE.Group();
+      grp.visible = expr === EXPR.NORMAL;
+      grp.name = 'led_' + expr;
+      for (const side of [-1, 1]) {
+        const led = new THREE.Mesh(eyeGeom, Game.mats.glow(eyeColors[expr], 1.8));
+        led.position.set(side * 0.07, 0.95, 0.17);
+        grp.add(led);
+      }
+      g.add(grp);
+      ledEyes[expr] = grp;
+    }
+    addAntenna(g, 1.1, 0x4de0ff);
+    const armL = addArm(g, -0.32, 0.58, 0, 0.2, 0.08, 0xb9bec9, -1, Game.mats.metal);
+    const armR = addArm(g, 0.32, 0.58, 0, 0.2, 0.08, 0xb9bec9, 1, Game.mats.metal);
+    // 手先はブロック状クローで機械感を強調
+    const handL = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), darkMat);
+    handL.position.set(-0.32 - 0.2 * 0.35, 0.58 - 0.2 * 0.15, 0);
+    g.add(handL);
+    const handR = handL.clone();
+    handR.position.x = 0.32 + 0.2 * 0.35;
+    g.add(handR);
+    // 下半身の代わり: マシン一体化を示すシアン発光コアリング(座席接続部)
+    const core = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.04, 8, SEG_MID), Game.mats.glow(0x4de0ff, 1.2));
+    core.rotation.x = Math.PI / 2;
+    core.position.y = 0.08;
+    g.add(core);
+    g.userData.parts = {
+      armL, armR, eyeL: null, eyeR: null, mouths: ledEyes, headY: 0.94, bodyRoot: g,
+      noBounceLegs: true,
+    };
+    return g;
+  }
+
+  // 5) シズク: シロップの水精霊。半透明ガラス質+オーロラ髪、雫状の下半身で浮遊(脚なし)
+  function buildShizuku() {
+    const g = new THREE.Group();
+    const drop = buildDropletBase(g, 0x5ec8f0);
+    const bodyMat = Game.mats.glass(0x8fdcff, 0.5);
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.28, SEG_MID, SEG_MID), bodyMat);
+    body.position.y = 0.72;
+    body.castShadow = true;
+    g.add(body);
+    // オーロラ色の髪(複数の細いカプセルを放射状に)
+    const auroraColors = [0xff9fd6, 0x9fd6ff, 0xd6ff9f];
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      const strand = new THREE.Mesh(new THREE.CapsuleGeometry(0.025, 0.22, 4, 6),
+        Game.mats.glow(auroraColors[i % auroraColors.length], 0.9));
+      strand.position.set(Math.cos(a) * 0.16, 0.98, Math.sin(a) * 0.16 - 0.05);
+      strand.rotation.z = Math.cos(a) * 0.5;
+      strand.rotation.x = Math.sin(a) * 0.5 + 0.3;
+      g.add(strand);
+    }
+    const eyes = addEyes(g, 0.76, 0.24, 0.1, 0.06, 0x2c6a8c);
+    const mouths = addMouthSet(g, 0.66, 0.27, 0.12, 0.09);
+    // 浮遊の泡飾り
+    const bubbleMat = Game.mats.glass(0xffffff, 0.75);
     const bubbles = [];
-    for (const [x, y, z] of bubblePos) {
-      const b = new THREE.Mesh(new THREE.SphereGeometry(0.045, 6, 6), bubbleMat);
+    for (const [x, y, z] of [[0.22, 0.5, 0.18], [-0.2, 0.35, -0.15], [0.14, 0.2, 0.2]]) {
+      const b = new THREE.Mesh(new THREE.SphereGeometry(0.035, 6, 6), bubbleMat);
       b.position.set(x, y, z);
       g.add(b);
       bubbles.push(b);
     }
-    const eyes = addEyes(g, 0.68, 0.3, 0.13, 0.07, 0x2c8c6e);
-    const mouths = addMouthSet(g, 0.56, 0.34, 0.13, 0.1);
-    addBlush(g, 0.6, 0.28, 0.2, 0.06);
-    // マフラー(シルエット強化)
-    addScarf(g, 0.5, 0.02, 0xffffff);
-    const armL = addArm(g, -0.36, 0.55, 0.05, 0.16, 0.06, 0x7fe0c0, -1);
-    const armR = addArm(g, 0.36, 0.55, 0.05, 0.16, 0.06, 0x7fe0c0, 1);
-    g.userData.parts = { armL, armR, eyeL: eyes.left, eyeR: eyes.right, mouths, headY: 0.68, bodyRoot: g, bubbles };
+    const armL = addArm(g, -0.26, 0.68, 0.02, 0.15, 0.05, 0x8fdcff, -1, Game.mats.glass);
+    const armR = addArm(g, 0.26, 0.68, 0.02, 0.15, 0.05, 0x8fdcff, 1, Game.mats.glass);
+    g.userData.parts = {
+      armL, armR, eyeL: eyes.left, eyeR: eyes.right, mouths, headY: 0.76, bodyRoot: g,
+      bubbles, floating: true, drop,
+    };
     return g;
   }
 
-  function buildWaffle() {
+  // 6) グミラス王: グミの王。ゼリー質の恰幅ある大柄体。紫グミ×金、王冠+赤マント
+  function buildGumiras() {
     const g = new THREE.Group();
-    const tex = texWaffle(128);
-    const bodyMat = new THREE.MeshLambertMaterial({ map: tex });
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.5, 0.4), bodyMat);
+    const jellyMat = Game.mats.glass(0x9a4fd6, 0.72);
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.44, SEG_MID, SEG_MID), jellyMat);
+    body.scale.set(1.15, 1.05, 1.05);
+    body.position.y = 0.56;
+    body.castShadow = true;
+    g.add(body);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.28, SEG_MID, SEG_LOW), jellyMat);
+    head.position.y = 1.06;
+    head.castShadow = true;
+    g.add(head);
+    addCape(g, 0.98, 0.12, 0xc9273f);
+    addCrown(g, 1.28, 0.2);
+    const eyes = addEyes(g, 1.08, 0.26, 0.12, 0.075, 0x5a2a70);
+    const mouths = addMouthSet(g, 0.96, 0.3, 0.16, 0.11);
+    const armL = addArm(g, -0.46, 0.68, 0.05, 0.22, 0.09, 0x9a4fd6, -1, Game.mats.glass);
+    const armR = addArm(g, 0.46, 0.68, 0.05, 0.22, 0.09, 0x9a4fd6, 1, Game.mats.glass);
+    addLeg(g, -0.18, 0.15, 0x9a4fd6, Game.mats.glass);
+    addLeg(g, 0.18, 0.15, 0x9a4fd6, Game.mats.glass);
+    g.userData.parts = { armL, armR, eyeL: eyes.left, eyeR: eyes.right, mouths, headY: 1.08, bodyRoot: g, jelly: true };
+    return g;
+  }
+
+  // 7) ノワール卿: ビターカカオの騎士。縦長シルエット。黒鎧+兜スリット発光
+  function buildNoir() {
+    const g = new THREE.Group();
+    const armorMat = new THREE.MeshLambertMaterial({ map: texBitterArmor(128) });
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.28, 0.6, SEG_MID), armorMat);
+    body.position.y = 0.5;
+    body.castShadow = true;
+    g.add(body);
+    const shoulderMat = Game.mats.metal(0x3a1414);
+    for (const side of [-1, 1]) {
+      const shoulder = new THREE.Mesh(new THREE.SphereGeometry(0.14, SEG_LOW, SEG_LOW, 0, Math.PI * 2, 0, Math.PI / 1.6), shoulderMat);
+      shoulder.position.set(side * 0.26, 0.76, 0);
+      shoulder.castShadow = true;
+      g.add(shoulder);
+    }
+    const helm = addHelm(g, 1.06, 0.24, 0x241512);
+    const slits = addSlitSet(g, 1.06, 0.235, 0.2, 0.06);
+    const armL = addArm(g, -0.34, 0.66, 0.02, 0.2, 0.08, 0x241512, -1);
+    const armR = addArm(g, 0.34, 0.66, 0.02, 0.2, 0.08, 0x241512, 1);
+    addLeg(g, -0.13, 0.15, 0x1a0f0d);
+    addLeg(g, 0.13, 0.15, 0x1a0f0d);
+    // 腰の金帯(強さの装飾)
+    const belt = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.07, SEG_MID), Game.mats.metal(0x8a1c1c));
+    belt.position.y = 0.32;
+    g.add(belt);
+    g.userData.parts = { armL, armR, eyeL: null, eyeR: null, mouths: slits, headY: 1.06, bodyRoot: g, isSlit: true };
+    return g;
+  }
+
+  // 8) バウム翁: 年輪の樹精の長老。縦長シルエット。ウッド茶×モスグリーン
+  function buildBaumjii() {
+    const g = new THREE.Group();
+    const woodMat = new THREE.MeshLambertMaterial({ map: texWoodRing(128) });
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.3, 0.68, SEG_MID), woodMat);
+    body.position.y = 0.48;
+    body.castShadow = true;
+    g.add(body);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.25, SEG_MID, SEG_LOW), Game.mats.matte(0xc79a5e));
+    head.position.y = 0.98;
+    head.castShadow = true;
+    g.add(head);
+    // モスグリーンの葉飾り(頭頂)
+    const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.2, 6), Game.mats.matte(0x5e8a4a));
+    leaf.position.y = 1.2;
+    leaf.rotation.x = 0.3;
+    g.add(leaf);
+    const eyes = addEyes(g, 0.98, 0.22, 0.1, 0.065, 0x5a3a20);
+    const mouths = addMouthSet(g, 0.86, 0.27, 0.14, 0.1);
+    addMustache(g, 0.9, 0.24, 0xfff6e0);
+    addMonocle(g, 0.1, 0.98, 0.24, 0.08);
+    const armL = addArm(g, -0.34, 0.58, 0.04, 0.19, 0.08, 0x5e8a4a, -1);
+    const armR = addArm(g, 0.34, 0.58, 0.04, 0.19, 0.08, 0x5e8a4a, 1);
+    const gloveL = addGloveHand(g, -0.34 - 0.19 * 0.35, 0.58 - 0.19 * 0.15, 0.04, 0x7a4a26);
+    const gloveR = addGloveHand(g, 0.34 + 0.19 * 0.35, 0.58 - 0.19 * 0.15, 0.04, 0x7a4a26);
+    addLeg(g, -0.14, 0.14, 0x5a3a20);
+    addLeg(g, 0.14, 0.14, 0x5a3a20);
+    g.userData.parts = { armL, armR, eyeL: eyes.left, eyeR: eyes.right, mouths, headY: 0.98, bodyRoot: g, gloveL, gloveR };
+    return g;
+  }
+
+  // 9) ジンジャ: ジンジャークッキーの忍者。小柄・軽量。ジンジャー茶×白×ミント
+  function buildGinja() {
+    const g = new THREE.Group();
+    const bodyTexMat = new THREE.MeshLambertMaterial({ map: texGingerBody(64) });
+    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.2, 0.34, 4, SEG_MID), bodyTexMat);
     body.position.y = 0.42;
     body.castShadow = true;
     g.add(body);
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.28, SEG_MID, SEG_LOW), bodyMat);
-    head.position.y = 0.86;
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, SEG_MID, SEG_LOW), bodyTexMat);
+    head.position.y = 0.82;
     head.castShadow = true;
     g.add(head);
-    // 頭頂のはちみつの雫(glassで艶)
-    const honeyMat = Game.mats.glass(0xf2a900, 0.8);
-    const honey = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.16, 8), honeyMat);
-    honey.position.y = 1.16;
-    g.add(honey);
-    const eyes = addEyes(g, 0.9, 0.24, 0.11, 0.065, 0x8a5a1c);
-    const mouths = addMouthSet(g, 0.78, 0.28, 0.13, 0.1);
-    addBlush(g, 0.82, 0.22, 0.18, 0.055);
-    // リーダーの飾緒+丸メガネ(几帳面なリーダー性を表現)
-    addSash(g, 0.62, 0.24, 0xd4af37);
-    addRoundGlasses(g, 0.9, 0.24, 0.08);
-    const armL = addArm(g, -0.4, 0.5, 0.05, 0.18, 0.08, 0xf2b23a, -1);
-    const armR = addArm(g, 0.4, 0.5, 0.05, 0.18, 0.08, 0xf2b23a, 1);
-    addLeg(g, -0.15, 0.14, 0xf2b23a);
-    addLeg(g, 0.15, 0.14, 0xf2b23a);
-    g.userData.parts = { armL, armR, eyeL: eyes.left, eyeR: eyes.right, mouths, headY: 0.9, bodyRoot: g };
-    return g;
-  }
-
-  function buildChocolat() {
-    const g = new THREE.Group();
-    const tex = texChoco(128);
-    const bodyMat = new THREE.MeshLambertMaterial({ map: tex });
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.7, 0.3), bodyMat);
-    body.position.y = 0.5;
-    body.castShadow = true;
-    g.add(body);
-    // 金の帯(metal)
-    const beltMat = Game.mats.metal(0xd4af37);
-    const belt = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.08, 0.32), beltMat);
-    belt.position.y = 0.42;
-    belt.castShadow = true;
-    g.add(belt);
-    // 頭
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.26, SEG_MID, SEG_LOW), new THREE.MeshLambertMaterial({ map: tex }));
-    head.position.y = 1.0;
-    head.castShadow = true;
-    g.add(head);
-    // 審査対応: 目を大きく+口を描き表情を強調
-    const eyes = addEyes(g, 1.04, 0.22, 0.11, 0.09, 0x2c1710);
-    const mouths = addMouthSet(g, 0.9, 0.27, 0.15, 0.11);
-    // フード状の襟巻き(無口な策士のミステリアスさを表現)
-    addHoodCollar(g, 0.82, 0x2c1710);
-    const armL = addArm(g, -0.36, 0.6, 0.05, 0.18, 0.08, 0x4a2b1c, -1);
-    const armR = addArm(g, 0.36, 0.6, 0.05, 0.18, 0.08, 0x4a2b1c, 1);
-    addLeg(g, -0.14, 0.14, 0x2c1710);
-    addLeg(g, 0.14, 0.14, 0x2c1710);
-    g.userData.parts = { armL, armR, eyeL: eyes.left, eyeR: eyes.right, mouths, headY: 1.04, bodyRoot: g };
-    return g;
-  }
-
-  function buildBaum() {
-    const g = new THREE.Group();
-    const tex = texBaum(128);
-    const bodyMat = new THREE.MeshLambertMaterial({ map: tex });
-    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.32, 0.75, SEG_MID), bodyMat);
-    body.position.y = 0.5;
-    body.castShadow = true;
-    g.add(body);
-    // 頭(球+粉砂糖の白い小球)
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.27, SEG_MID, SEG_LOW), Game.mats.matte(0xd9a86a));
-    head.position.y = 1.0;
-    head.castShadow = true;
-    g.add(head);
-    const sugarMat = Game.mats.matte(0xffffff);
-    for (let i = 0; i < 6; i++) {
-      const s = new THREE.Mesh(new THREE.SphereGeometry(0.025, 5, 5), sugarMat);
-      const a = (i / 6) * Math.PI * 2, r = 0.24 + (i % 2) * 0.05;
-      s.position.set(Math.cos(a) * r, 1.0 + ((i % 3) - 1) * 0.06, Math.sin(a) * r);
-      g.add(s);
-    }
-    // 審査対応: 大きな優しいタレ目
-    const eyes = addEyes(g, 1.0, 0.24, 0.1, 0.08, 0x8a5a2e);
-    const mouths = addMouthSet(g, 0.88, 0.29, 0.14, 0.1);
-    addBlush(g, 0.92, 0.22, 0.18, 0.06);
-    // ロングマフラー(物静かな年長者の落ち着きを表現)
-    addLongMuffler(g, 0.78, 0xc94f5c);
-    const armL = addArm(g, -0.38, 0.6, 0.05, 0.18, 0.08, 0xc9925a, -1);
-    const armR = addArm(g, 0.38, 0.6, 0.05, 0.18, 0.08, 0xc9925a, 1);
-    addLeg(g, -0.14, 0.14, 0xc9925a);
-    addLeg(g, 0.14, 0.14, 0xc9925a);
-    g.userData.parts = { armL, armR, eyeL: eyes.left, eyeR: eyes.right, mouths, headY: 1.0, bodyRoot: g };
-    return g;
-  }
-
-  function buildBonbon() {
-    const g = new THREE.Group();
-    const tex = texBonbon(128);
-    const bodyMat = new THREE.MeshLambertMaterial({ map: tex });
-    const body = new THREE.Mesh(new THREE.SphereGeometry(0.42, SEG_MID, SEG_MID), bodyMat);
-    body.position.y = 0.55;
-    body.castShadow = true;
-    g.add(body);
-    // 審査対応: 丸い半球の突起を少なめに配置(尖らせず可愛く)
-    const bumpMat = Game.mats.paint(0xffe066);
-    const bumpDirs = [
-      [0, 1, 0], [0.7, 0.5, 0.5], [-0.7, 0.5, 0.5], [0.6, 0.3, -0.6], [-0.6, 0.3, -0.6],
-    ];
-    for (const [dx, dy, dz] of bumpDirs) {
-      const len = Math.hypot(dx, dy, dz) || 1;
-      const nx = dx / len, ny = dy / len, nz = dz / len;
-      const bump = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6, 0, Math.PI * 2, 0, Math.PI / 2), bumpMat);
-      bump.position.set(0.42 * nx, 0.55 + 0.42 * ny, 0.42 * nz);
-      bump.lookAt(new THREE.Vector3(0.42 * nx * 2, 0.55 + 0.42 * ny * 2, 0.42 * nz * 2));
-      bump.rotateX(Math.PI / 2);
-      bump.castShadow = true;
-      g.add(bump);
-    }
-    const eyes = addEyes(g, 0.6, 0.34, 0.14, 0.075, 0x8c1c33);
-    const mouths = addMouthSet(g, 0.48, 0.38, 0.14, 0.1);
-    addBlush(g, 0.52, 0.32, 0.22, 0.06);
-    // ヘッドバンド+パワーグローブ(破天荒なパワー型を表現)
-    addHeadband(g, 0.78, 0.32, 0xffe066);
-    const armL = addArm(g, -0.4, 0.5, 0.05, 0.18, 0.08, 0xff5d7a, -1);
-    const armR = addArm(g, 0.4, 0.5, 0.05, 0.18, 0.08, 0xff5d7a, 1);
-    const gloveL = addPowerGlove(g, -0.4 - 0.02, 0.36, 0.1, 0xffe066);
-    const gloveR = addPowerGlove(g, 0.4 + 0.02, 0.36, 0.1, 0xffe066);
-    addLeg(g, -0.16, 0.12, 0xff5d7a);
-    addLeg(g, 0.16, 0.12, 0xff5d7a);
-    g.userData.parts = { armL, armR, eyeL: eyes.left, eyeR: eyes.right, mouths, headY: 0.6, bodyRoot: g, gloveL, gloveR };
+    const eyes = addEyes(g, 0.84, 0.19, 0.09, 0.055, 0x3a2410);
+    const mouths = addMouthSet(g, 0.76, 0.23, 0.12, 0.08);
+    addIcingMarks(g, 0.84, 0.18, 0xffffff);
+    addNinjaSash(g, 0.56, 0x7fe0c0);
+    const armL = addArm(g, -0.26, 0.5, 0.03, 0.16, 0.06, 0xa86a34, -1);
+    const armR = addArm(g, 0.26, 0.5, 0.03, 0.16, 0.06, 0xa86a34, 1);
+    addLeg(g, -0.11, 0.12, 0x7fe0c0);
+    addLeg(g, 0.11, 0.12, 0x7fe0c0);
+    g.userData.parts = { armL, armR, eyeL: eyes.left, eyeR: eyes.right, mouths, headY: 0.84, bodyRoot: g };
     return g;
   }
 
   const builders = {
-    macaron: buildMacaron,
-    donut: buildDonut,
-    taplin: buildTaplin,
-    sofukurin: buildSofukurin,
-    sodaShuwari: buildSoda,
-    waffle: buildWaffle,
-    chocolat: buildChocolat,
-    baum: buildBaum,
-    bonbon: buildBonbon,
+    kurumu: buildKurumu,
+    rupo: buildRupo,
+    donga: buildDonga,
+    volt8: buildVolt8,
+    shizuku: buildShizuku,
+    gumiras: buildGumiras,
+    noir: buildNoir,
+    baumjii: buildBaumjii,
+    ginja: buildGinja,
   };
 
   function build(id) {
-    const fn = builders[id] || buildMacaron;
+    const fn = builders[id] || buildKurumu;
     const g = fn();
     g.name = 'char_' + id;
     // アニメ用ランタイム状態(kart.jsのupdateVisualから毎フレーム呼ばれるanimate()が使う)
@@ -846,6 +943,19 @@
     return g;
   }
 
+  // キャラごとのマウントスケール(小柄0.95〜大柄1.25)
+  const MOUNT_SCALE = {
+    kurumu: 0.95,
+    rupo: 1.0,
+    donga: 1.25,
+    volt8: 1.05,
+    shizuku: 1.0,
+    gumiras: 1.22,
+    noir: 1.1,
+    baumjii: 1.1,
+    ginja: 0.95,
+  };
+
   // kart.group内のriderPlaceholderを除去し、同位置にキャラを座らせる
   function mountOn(kart, id) {
     if (!kart || !kart.group) return;
@@ -855,9 +965,7 @@
     if (placeholder && parent) parent.remove(placeholder);
 
     const charGroup = build(id);
-    // 身長約1.2 → カートの主役として大きく見せる(カートレースはキャラが顔なので
-    // 控えめなスケールだとシートに隠れてしまう。実画面確認で1.1に調整済み)
-    const scale = 1.1;
+    const scale = MOUNT_SCALE[id] || 1.1;
     charGroup.scale.setScalar(scale);
     charGroup.position.set(pos.x, pos.y - 0.15, pos.z);
     if (parent) parent.add(charGroup);
@@ -870,9 +978,9 @@
     kart._charGroup = charGroup;
   }
 
-  // ==================== アニメーション(Phase 6 新規API) ====================
+  // ==================== アニメーション ====================
   // 表情切替はexprが変化した時だけ行う(毎フレームのテクスチャ生成はしない。
-  // 表情ごとの口メッシュは build() 時に事前生成済みで、ここではvisible切替のみ)
+  // 表情ごとの口/スリットメッシュはbuild()時に事前生成済みで、ここではvisible切替のみ)
   function setExpr(parts, anim, expr) {
     if (anim.expr === expr) return;
     anim.expr = expr;
@@ -881,12 +989,24 @@
     }
   }
 
+  // キャラ個性別の走行アニメ調整係数(DESIGN.md要求: ドンガ=重々しい, シズク=浮遊,
+  // ジンジャ=素早い小刻み, ノワール=ほぼ動じない, グミラス=ぷるぷる)
+  const PERSONA = {
+    donga:   { bounceMul: 0.55, freqMul: 0.6,  leanMul: 0.7,  armSwingMul: 0.7 },
+    shizuku: { bounceMul: 0,    freqMul: 1.0,  leanMul: 1.0,  armSwingMul: 0.8, hover: true },
+    ginja:   { bounceMul: 1.3,  freqMul: 1.9,  leanMul: 1.3,  armSwingMul: 1.4 },
+    noir:    { bounceMul: 0.35, freqMul: 0.7,  leanMul: 0.4,  armSwingMul: 0.35 },
+    gumiras: { bounceMul: 1.0,  freqMul: 1.0,  leanMul: 1.0,  armSwingMul: 1.0, jiggle: true },
+  };
+  const DEFAULT_PERSONA = { bounceMul: 1.0, freqMul: 1.0, leanMul: 1.0, armSwingMul: 1.0 };
+
   function animate(kart, dt, steer) {
     const g = kart._charGroup;
     if (!g || !g.userData || !g.userData.parts) return;
     const parts = g.userData.parts;
     const anim = g.userData.anim;
     const U = Game.U;
+    const P = PERSONA[kart.charId] || DEFAULT_PERSONA;
 
     const spinning = kart.spinT > 0;
     const boosting = kart.boostT > 0;
@@ -899,24 +1019,32 @@
     else if (boosting || starring) setExpr(parts, anim, EXPR.EXCITED);
     else setExpr(parts, anim, EXPR.NORMAL);
 
-    // ---- 速度に応じた上下バウンス(もちもち感) ----
+    // ---- 速度に応じた上下バウンス(もちもち感)。キャラ個性で係数を変える ----
     const speedRatio = U.clamp(Math.abs(kart.speed) / (Game.config.physics.maxSpeed || 30), 0, 1.6);
-    const freq = ANIM.bounceFreqMin + (ANIM.bounceFreqMax - ANIM.bounceFreqMin) * Math.min(speedRatio, 1);
+    const freq = (ANIM.bounceFreqMin + (ANIM.bounceFreqMax - ANIM.bounceFreqMin) * Math.min(speedRatio, 1)) * P.freqMul;
     anim.bounceT += dt * freq;
-    const amp = kart.grounded
+    const baseAmp = kart.grounded
       ? ANIM.bounceAmpBase + (boosting || starring ? ANIM.bounceAmpBoost : 0) * (0.6 + 0.4 * Math.sin(anim.bounceT * 2))
       : 0;
-    const bounceY = spinning ? 0 : Math.abs(Math.sin(anim.bounceT)) * amp;
+    const amp = baseAmp * P.bounceMul;
+    let bounceY = spinning ? 0 : Math.abs(Math.sin(anim.bounceT)) * amp;
+    // シズクは接地バウンスなしで、ゆったり上下に浮遊する
+    if (P.hover) {
+      bounceY = 0.06 + Math.sin(anim.bounceT * 0.6) * 0.035;
+    }
     g.position.y = -0.15 + bounceY;
-    // わずかなスクイーズ(もちもち感の核: 縦伸縮に対し横を逆位相で伸縮)
-    const squish = spinning ? 1 : 1 + Math.sin(anim.bounceT) * (amp * 1.6);
-    g.scale.set(1.1 / Math.sqrt(squish), 1.1 * squish, 1.1 / Math.sqrt(squish));
+    // わずかなスクイーズ(もちもち感の核: 縦伸縮に対し横を逆位相で伸縮)。グミラスはゼリー質でより強く
+    const squishAmpMul = P.jiggle ? 2.2 : 1.0;
+    const squish = spinning ? 1 : 1 + Math.sin(anim.bounceT) * (amp * 1.6 * squishAmpMul);
+    const scaleBase = g.scale.x > 0 ? undefined : undefined; // no-op (scale set on mount; keep relative factor)
+    const baseScale = MOUNT_SCALE[kart.charId] || 1.1;
+    g.scale.set(baseScale / Math.sqrt(squish), baseScale * squish, baseScale / Math.sqrt(squish));
 
     // ---- ステア/ドリフト方向へのリーン ----
-    let targetLeanZ = -steer * ANIM.leanMax * 0.5;
+    let targetLeanZ = -steer * ANIM.leanMax * 0.5 * P.leanMul;
     let targetLeanX = 0;
     if (kart.drift && kart.drift.state === 'drifting') {
-      targetLeanZ = -kart.drift.dir * ANIM.leanMax;
+      targetLeanZ = -kart.drift.dir * ANIM.leanMax * P.leanMul;
     }
     if (boosting || starring) {
       targetLeanX = ANIM.forwardLeanBoost;
@@ -929,12 +1057,12 @@
     // ---- 腕アニメーション ----
     const armL = parts.armL, armR = parts.armR;
     if (spinning) {
-      // 被弾スピン中: 腕をバタバタ
-      const flap = Math.sin(anim.bounceT * ANIM.armFlapFreq) * ANIM.armFlapAmp;
+      // 被弾スピン中: 腕をバタバタ(ノワールは動じないため控えめ)
+      const flap = Math.sin(anim.bounceT * ANIM.armFlapFreq) * ANIM.armFlapAmp * P.armSwingMul;
       armL.rotation.x = flap;
       armR.rotation.x = -flap;
       anim.joyRaise = 0;
-      // 目を回す表情: 目メッシュを頭部中心にぐるぐる回転
+      // 目を回す表情: 目メッシュを頭部中心にぐるぐる回転(目がないキャラはガード済み)
       const spin = performance.now() * 0.001 * ANIM.dizzyHeadSpin;
       if (parts.eyeL) parts.eyeL.rotation.z = spin;
       if (parts.eyeR) parts.eyeR.rotation.z = -spin;
@@ -943,20 +1071,19 @@
       anim.joyRaise = U.damp(anim.joyRaise, 1, ANIM.joyArmUpSpeed, dt);
       armL.rotation.x = -anim.joyRaise * 2.4;
       armR.rotation.x = -anim.joyRaise * 2.4;
-      armL.rotation.z = (parts.armL === armL ? -0.3 : 0);
       if (parts.eyeL) parts.eyeL.rotation.z = U.damp(parts.eyeL.rotation.z, 0, 10, dt);
       if (parts.eyeR) parts.eyeR.rotation.z = U.damp(parts.eyeR.rotation.z, 0, 10, dt);
     } else {
       anim.joyRaise = U.damp(anim.joyRaise, 0, ANIM.joyArmUpSpeed, dt);
-      // 通常時: 走行に合わせて軽く前後に揺らす(ランニングモーション)
-      const swing = Math.sin(anim.bounceT) * 0.25 * Math.min(speedRatio, 1);
+      // 通常時: 走行に合わせて軽く前後に揺らす(ランニングモーション)。キャラごとに速さが違う
+      const swing = Math.sin(anim.bounceT) * 0.25 * Math.min(speedRatio, 1) * P.armSwingMul;
       armL.rotation.x = swing - anim.joyRaise * 2.4;
       armR.rotation.x = -swing - anim.joyRaise * 2.4;
       if (parts.eyeL) parts.eyeL.rotation.z = U.damp(parts.eyeL.rotation.z, 0, 10, dt);
       if (parts.eyeR) parts.eyeR.rotation.z = U.damp(parts.eyeR.rotation.z, 0, 10, dt);
     }
 
-    // ソーダの泡はふわふわ漂わせる(専用パーツがある場合のみ)
+    // シズクの泡/髪はふわふわ漂わせる(専用パーツがある場合のみ)
     if (parts.bubbles) {
       const t = anim.bounceT;
       for (let i = 0; i < parts.bubbles.length; i++) {
@@ -997,13 +1124,13 @@
     ctx.stroke();
   }
 
-  function eyesAndMouth(ctx, size, cx, cy, r, mouthColor) {
+  function eyesAndMouth(ctx, size, cx, cy, r, irisColor, mouthColor) {
     // 白目
     ctx.fillStyle = '#ffffff';
     ctx.beginPath(); ctx.ellipse(cx - r * 1.1, cy, r * 0.42, r * 0.46, 0, 0, Math.PI * 2); ctx.fill();
     ctx.beginPath(); ctx.ellipse(cx + r * 1.1, cy, r * 0.42, r * 0.46, 0, 0, Math.PI * 2); ctx.fill();
     // 虹彩
-    ctx.fillStyle = '#3a2a20';
+    ctx.fillStyle = irisColor || '#3a2a20';
     ctx.beginPath(); ctx.arc(cx - r * 1.1, cy + r * 0.05, r * 0.3, 0, Math.PI * 2); ctx.fill();
     ctx.beginPath(); ctx.arc(cx + r * 1.1, cy + r * 0.05, r * 0.3, 0, Math.PI * 2); ctx.fill();
     // 輪郭
@@ -1022,196 +1149,169 @@
     ctx.beginPath();
     ctx.arc(cx, cy + r * 1.3, r * 0.75, 0.15 * Math.PI, 0.85 * Math.PI);
     ctx.stroke();
-    // 頬
-    ctx.fillStyle = 'rgba(255,159,184,0.7)';
-    ctx.beginPath(); ctx.arc(cx - r * 1.8, cy + r * 0.9, r * 0.28, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(cx + r * 1.8, cy + r * 0.9, r * 0.28, 0, Math.PI * 2); ctx.fill();
   }
 
   const portraitDrawers = {
-    macaron(ctx, size) {
+    kurumu(ctx, size) {
       radialBg(ctx, size);
-      shadeCircle(ctx, size * 0.5, size * 0.34, size * 0.32, '#ffb0cc');
-      ctx.fillStyle = '#fff6e0';
-      ctx.fillRect(size * 0.18, size * 0.42, size * 0.64, size * 0.1);
-      shadeCircle(ctx, size * 0.5, size * 0.6, size * 0.32, '#ffb0cc');
-      eyesAndMouth(ctx, size, size * 0.5, size * 0.5, size * 0.045);
+      shadeCircle(ctx, size * 0.5, size * 0.36, size * 0.3, '#fff6e0');
+      shadeCircle(ctx, size * 0.5, size * 0.62, size * 0.3, '#e8412f');
+      eyesAndMouth(ctx, size, size * 0.5, size * 0.4, size * 0.045, '#4a2a1c');
       // ゴーグル
       ctx.strokeStyle = 'rgba(51,51,51,0.85)';
       ctx.lineWidth = size * 0.02;
-      ctx.beginPath(); ctx.arc(size * 0.5 - size * 0.11, size * 0.5, size * 0.07, 0, Math.PI * 2); ctx.stroke();
-      ctx.beginPath(); ctx.arc(size * 0.5 + size * 0.11, size * 0.5, size * 0.07, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(size * 0.5 - size * 0.11, size * 0.4, size * 0.07, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(size * 0.5 + size * 0.11, size * 0.4, size * 0.07, 0, Math.PI * 2); ctx.stroke();
       ctx.fillStyle = 'rgba(105,209,255,0.35)';
-      ctx.beginPath(); ctx.arc(size * 0.5 - size * 0.11, size * 0.5, size * 0.06, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(size * 0.5 + size * 0.11, size * 0.5, size * 0.06, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#ffe066';
-      ctx.beginPath(); ctx.arc(size * 0.5, size * 0.2, size * 0.045, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(size * 0.5 - size * 0.11, size * 0.4, size * 0.06, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(size * 0.5 + size * 0.11, size * 0.4, size * 0.06, 0, Math.PI * 2); ctx.fill();
+      // キャップ
+      ctx.fillStyle = '#fff6e0';
+      ctx.beginPath(); ctx.arc(size * 0.5, size * 0.18, size * 0.17, Math.PI, Math.PI * 2); ctx.fill();
+      // スカーフ
+      ctx.fillStyle = '#e8412f';
+      ctx.fillRect(size * 0.36, size * 0.72, size * 0.28, size * 0.08);
     },
-    donut(ctx, size) {
+    rupo(ctx, size) {
       radialBg(ctx, size);
-      shadeCircle(ctx, size * 0.5, size * 0.48, size * 0.33, '#e08a4c');
-      ctx.fillStyle = '#ff6f91';
-      ctx.beginPath(); ctx.arc(size * 0.5, size * 0.42, size * 0.28, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#ffe066';
-      ctx.beginPath(); ctx.arc(size * 0.5, size * 0.6, size * 0.12, 0, Math.PI * 2); ctx.fill();
-      const sc = ['#69d1ff', '#8affc1', '#ffffff'];
-      for (let i = 0; i < 12; i++) {
-        ctx.fillStyle = sc[i % sc.length];
-        const a = (i / 12) * Math.PI * 2, r = size * 0.2;
-        ctx.save();
-        ctx.translate(size * 0.5 + Math.cos(a) * r, size * 0.42 + Math.sin(a) * r);
-        ctx.rotate(a);
-        ctx.fillRect(-size * 0.02, -size * 0.005, size * 0.04, size * 0.01);
-        ctx.restore();
-      }
-      // 後ろ向きキャップ
-      ctx.fillStyle = '#ffb3de';
-      ctx.beginPath(); ctx.arc(size * 0.5, size * 0.2, size * 0.16, Math.PI, Math.PI * 2); ctx.fill();
-      ctx.fillRect(size * 0.5 - size * 0.02, size * 0.1, size * 0.04, size * 0.06);
-      eyesAndMouth(ctx, size, size * 0.5, size * 0.62, size * 0.045);
+      shadeCircle(ctx, size * 0.5, size * 0.5, size * 0.32, '#ff8c2b');
+      // 耳
+      ctx.fillStyle = '#ff8c2b';
+      ctx.beginPath(); ctx.moveTo(size * 0.32, size * 0.28); ctx.lineTo(size * 0.26, size * 0.08); ctx.lineTo(size * 0.4, size * 0.22); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(size * 0.68, size * 0.28); ctx.lineTo(size * 0.74, size * 0.08); ctx.lineTo(size * 0.6, size * 0.22); ctx.closePath(); ctx.fill();
+      // 鼻先
+      ctx.fillStyle = '#fff2e0';
+      ctx.beginPath(); ctx.moveTo(size * 0.42, size * 0.56); ctx.lineTo(size * 0.58, size * 0.56); ctx.lineTo(size * 0.5, size * 0.7); ctx.closePath(); ctx.fill();
+      // 飛行帽
+      ctx.fillStyle = '#5a3a20';
+      ctx.beginPath(); ctx.arc(size * 0.5, size * 0.32, size * 0.28, Math.PI, Math.PI * 2); ctx.fill();
+      // ゴーグル
+      ctx.fillStyle = 'rgba(255,224,102,0.5)';
+      ctx.strokeStyle = 'rgba(51,51,51,0.85)';
+      ctx.lineWidth = size * 0.018;
+      ctx.beginPath(); ctx.arc(size * 0.5 - size * 0.1, size * 0.4, size * 0.065, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.arc(size * 0.5 + size * 0.1, size * 0.4, size * 0.065, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      eyesAndMouth(ctx, size, size * 0.5, size * 0.56, size * 0.04, '#3a2a1c');
     },
-    taplin(ctx, size) {
+    donga(ctx, size) {
       radialBg(ctx, size);
-      ctx.fillStyle = '#ffd23f';
-      ctx.beginPath();
-      ctx.moveTo(size * 0.28, size * 0.7);
-      ctx.lineTo(size * 0.72, size * 0.7);
-      ctx.lineTo(size * 0.6, size * 0.3);
-      ctx.lineTo(size * 0.4, size * 0.3);
-      ctx.closePath();
-      ctx.fill();
-      const grad = ctx.createLinearGradient(size * 0.3, size * 0.3, size * 0.7, size * 0.7);
+      shadeCircle(ctx, size * 0.5, size * 0.5, size * 0.34, '#8a7362');
+      // ひび割れ発光
+      ctx.strokeStyle = '#ff5a1c';
+      ctx.lineWidth = size * 0.025;
+      ctx.beginPath(); ctx.moveTo(size * 0.36, size * 0.3); ctx.lineTo(size * 0.44, size * 0.5); ctx.lineTo(size * 0.34, size * 0.62); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(size * 0.62, size * 0.28); ctx.lineTo(size * 0.58, size * 0.48); ctx.lineTo(size * 0.68, size * 0.6); ctx.stroke();
+      eyesAndMouth(ctx, size, size * 0.5, size * 0.48, size * 0.055, '#ff6a1c');
+    },
+    volt8(ctx, size) {
+      radialBg(ctx, size);
+      ctx.fillStyle = '#b9bec9';
+      ctx.fillRect(size * 0.28, size * 0.24, size * 0.44, size * 0.4);
+      const grad = ctx.createLinearGradient(size * 0.28, size * 0.24, size * 0.72, size * 0.64);
       grad.addColorStop(0, 'rgba(255,255,255,0.35)');
-      grad.addColorStop(1, 'rgba(0,0,0,0.12)');
+      grad.addColorStop(1, 'rgba(0,0,0,0.2)');
       ctx.fillStyle = grad;
+      ctx.fillRect(size * 0.28, size * 0.24, size * 0.44, size * 0.4);
+      ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+      ctx.lineWidth = size * 0.015;
+      ctx.strokeRect(size * 0.28, size * 0.24, size * 0.44, size * 0.4);
+      // LEDツインアイ
+      ctx.fillStyle = '#4de0ff';
+      ctx.shadowColor = '#4de0ff';
+      ctx.shadowBlur = size * 0.04;
+      ctx.fillRect(size * 0.38, size * 0.4, size * 0.06, size * 0.05);
+      ctx.fillRect(size * 0.56, size * 0.4, size * 0.06, size * 0.05);
+      ctx.shadowBlur = 0;
+      // アンテナ
+      ctx.strokeStyle = '#8a8f9a';
+      ctx.lineWidth = size * 0.015;
+      ctx.beginPath(); ctx.moveTo(size * 0.5, size * 0.24); ctx.lineTo(size * 0.5, size * 0.1); ctx.stroke();
+      ctx.fillStyle = '#4de0ff';
+      ctx.beginPath(); ctx.arc(size * 0.5, size * 0.08, size * 0.025, 0, Math.PI * 2); ctx.fill();
+    },
+    shizuku(ctx, size) {
+      radialBg(ctx, size);
+      ctx.fillStyle = 'rgba(94,200,240,0.55)';
       ctx.beginPath();
-      ctx.moveTo(size * 0.28, size * 0.7);
-      ctx.lineTo(size * 0.72, size * 0.7);
-      ctx.lineTo(size * 0.6, size * 0.3);
-      ctx.lineTo(size * 0.4, size * 0.3);
-      ctx.closePath();
+      ctx.ellipse(size * 0.5, size * 0.5, size * 0.3, size * 0.34, 0, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = '#c98a3a';
-      ctx.beginPath(); ctx.ellipse(size * 0.5, size * 0.3, size * 0.2, size * 0.07, 0, 0, Math.PI * 2); ctx.fill();
-      // 蝶ネクタイ
-      ctx.fillStyle = '#ff5d7a';
-      ctx.beginPath(); ctx.moveTo(size * 0.5, size * 0.68); ctx.lineTo(size * 0.42, size * 0.62); ctx.lineTo(size * 0.42, size * 0.74); ctx.closePath(); ctx.fill();
-      ctx.beginPath(); ctx.moveTo(size * 0.5, size * 0.68); ctx.lineTo(size * 0.58, size * 0.62); ctx.lineTo(size * 0.58, size * 0.74); ctx.closePath(); ctx.fill();
-      eyesAndMouth(ctx, size, size * 0.5, size * 0.48, size * 0.045, '#8a5a1c');
-    },
-    sofukurin(ctx, size) {
-      radialBg(ctx, size);
-      ctx.fillStyle = '#f3fbff';
-      ctx.beginPath(); ctx.moveTo(size * 0.5, size * 0.2);
-      ctx.bezierCurveTo(size * 0.75, size * 0.35, size * 0.7, size * 0.65, size * 0.5, size * 0.8);
-      ctx.bezierCurveTo(size * 0.3, size * 0.65, size * 0.25, size * 0.35, size * 0.5, size * 0.2);
-      ctx.fill();
-      ctx.fillStyle = '#bfe8ff';
-      ctx.beginPath(); ctx.arc(size * 0.5, size * 0.5, size * 0.14, 0, Math.PI * 2); ctx.fill();
-      // サングラス
-      ctx.fillStyle = 'rgba(42,42,42,0.85)';
-      ctx.beginPath(); ctx.arc(size * 0.5 - size * 0.1, size * 0.48, size * 0.065, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(size * 0.5 + size * 0.1, size * 0.48, size * 0.065, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = 'rgba(42,42,42,0.85)';
-      ctx.lineWidth = size * 0.012;
-      ctx.beginPath(); ctx.moveTo(size * 0.5 - size * 0.04, size * 0.48); ctx.lineTo(size * 0.5 + size * 0.04, size * 0.48); ctx.stroke();
-      eyesAndMouth(ctx, size, size * 0.5, size * 0.62, size * 0.04, '#5a9ec9');
-    },
-    sodaShuwari(ctx, size) {
-      radialBg(ctx, size);
-      shadeCircle(ctx, size * 0.5, size * 0.5, size * 0.32, 'rgba(127,224,192,0.9)');
-      ctx.fillStyle = '#3d8bff';
-      ctx.beginPath(); ctx.arc(size * 0.5, size * 0.24, size * 0.07, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = 'rgba(255,255,255,0.85)';
-      for (const [dx, dy, r] of [[0.15, -0.1, 0.03], [-0.15, 0.05, 0.025], [0.1, 0.2, 0.02]]) {
-        ctx.beginPath(); ctx.arc(size * (0.5 + dx), size * (0.5 + dy), size * r, 0, Math.PI * 2); ctx.fill();
+      // オーロラの髪
+      const cols = ['rgba(255,159,214,0.7)', 'rgba(159,214,255,0.7)', 'rgba(214,255,159,0.7)'];
+      for (let i = 0; i < 6; i++) {
+        ctx.strokeStyle = cols[i % cols.length];
+        ctx.lineWidth = size * 0.02;
+        const a = (i / 6) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.moveTo(size * 0.5, size * 0.28);
+        ctx.lineTo(size * 0.5 + Math.cos(a) * size * 0.2, size * 0.28 - size * 0.14 + Math.sin(a) * size * 0.06);
+        ctx.stroke();
       }
-      // マフラー
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(size * 0.34, size * 0.68, size * 0.32, size * 0.08);
-      eyesAndMouth(ctx, size, size * 0.5, size * 0.52, size * 0.045, '#2c8c6e');
+      eyesAndMouth(ctx, size, size * 0.5, size * 0.5, size * 0.045, '#2c6a8c');
     },
-    waffle(ctx, size) {
+    gumiras(ctx, size) {
       radialBg(ctx, size);
-      shadeCircle(ctx, size * 0.5, size * 0.5, size * 0.32, '#f2b23a');
-      ctx.strokeStyle = 'rgba(201,135,28,0.8)';
-      ctx.lineWidth = size * 0.02;
-      for (let i = -2; i <= 2; i++) {
-        ctx.beginPath(); ctx.moveTo(size * (0.5 + i * 0.1), size * 0.2); ctx.lineTo(size * (0.5 + i * 0.1), size * 0.8); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(size * 0.2, size * (0.5 + i * 0.1)); ctx.lineTo(size * 0.8, size * (0.5 + i * 0.1)); ctx.stroke();
-      }
-      ctx.fillStyle = 'rgba(242,169,0,0.75)';
-      ctx.beginPath(); ctx.arc(size * 0.5, size * 0.2, size * 0.04, 0, Math.PI * 2); ctx.fill();
-      // 丸メガネ
-      ctx.strokeStyle = 'rgba(212,175,55,0.9)';
-      ctx.lineWidth = size * 0.018;
-      ctx.beginPath(); ctx.arc(size * 0.5 - size * 0.1, size * 0.48, size * 0.06, 0, Math.PI * 2); ctx.stroke();
-      ctx.beginPath(); ctx.arc(size * 0.5 + size * 0.1, size * 0.48, size * 0.06, 0, Math.PI * 2); ctx.stroke();
-      eyesAndMouth(ctx, size, size * 0.5, size * 0.5, size * 0.045, '#8a5a1c');
+      shadeCircle(ctx, size * 0.5, size * 0.54, size * 0.34, '#9a4fd6');
+      // マント
+      ctx.fillStyle = 'rgba(201,39,63,0.85)';
+      ctx.beginPath(); ctx.moveTo(size * 0.2, size * 0.5); ctx.lineTo(size * 0.28, size * 0.85); ctx.lineTo(size * 0.72, size * 0.85); ctx.lineTo(size * 0.8, size * 0.5); ctx.closePath(); ctx.fill();
+      // 王冠
+      ctx.fillStyle = '#d4af37';
+      ctx.beginPath();
+      ctx.moveTo(size * 0.32, size * 0.24); ctx.lineTo(size * 0.38, size * 0.1); ctx.lineTo(size * 0.44, size * 0.22);
+      ctx.lineTo(size * 0.5, size * 0.06); ctx.lineTo(size * 0.56, size * 0.22); ctx.lineTo(size * 0.62, size * 0.1);
+      ctx.lineTo(size * 0.68, size * 0.24); ctx.closePath(); ctx.fill();
+      eyesAndMouth(ctx, size, size * 0.5, size * 0.46, size * 0.05, '#5a2a70');
     },
-    chocolat(ctx, size) {
+    noir(ctx, size) {
       radialBg(ctx, size);
-      ctx.fillStyle = '#4a2b1c';
-      ctx.fillRect(size * 0.2, size * 0.2, size * 0.6, size * 0.6);
-      const grad = ctx.createLinearGradient(size * 0.2, size * 0.2, size * 0.8, size * 0.8);
-      grad.addColorStop(0, 'rgba(255,255,255,0.18)');
-      grad.addColorStop(1, 'rgba(0,0,0,0.25)');
-      ctx.fillStyle = grad;
-      ctx.fillRect(size * 0.2, size * 0.2, size * 0.6, size * 0.6);
-      ctx.strokeStyle = '#2c1710';
-      ctx.lineWidth = size * 0.018;
-      ctx.beginPath(); ctx.moveTo(size * 0.5, size * 0.2); ctx.lineTo(size * 0.5, size * 0.8); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(size * 0.2, size * 0.5); ctx.lineTo(size * 0.8, size * 0.5); ctx.stroke();
-      // フード襟巻き
-      ctx.strokeStyle = 'rgba(44,23,16,0.9)';
-      ctx.lineWidth = size * 0.03;
-      ctx.beginPath(); ctx.arc(size * 0.5, size * 0.7, size * 0.16, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke();
-      // 大きめの目で表情強調
-      eyesAndMouth(ctx, size, size * 0.5, size * 0.5, size * 0.06, '#ffd166');
+      shadeCircle(ctx, size * 0.5, size * 0.5, size * 0.34, '#241512');
+      // 兜のスリット発光
+      ctx.fillStyle = '#ff3b30';
+      ctx.shadowColor = '#ff3b30';
+      ctx.shadowBlur = size * 0.05;
+      ctx.fillRect(size * 0.32, size * 0.47, size * 0.36, size * 0.06);
+      ctx.shadowBlur = 0;
+      // 兜の頂飾り
+      ctx.fillStyle = '#8a1c1c';
+      ctx.fillRect(size * 0.48, size * 0.14, size * 0.04, size * 0.14);
     },
-    baum(ctx, size) {
+    baumjii(ctx, size) {
       radialBg(ctx, size);
-      shadeCircle(ctx, size * 0.5, size * 0.5, size * 0.32, '#c9925a');
-      ctx.strokeStyle = 'rgba(138,90,46,0.85)';
-      ctx.lineWidth = size * 0.02;
-      for (let r = size * 0.08; r < size * 0.3; r += size * 0.06) {
+      shadeCircle(ctx, size * 0.5, size * 0.5, size * 0.32, '#c79a5e');
+      ctx.strokeStyle = 'rgba(110,70,30,0.7)';
+      ctx.lineWidth = size * 0.015;
+      for (let r = size * 0.08; r < size * 0.3; r += size * 0.05) {
         ctx.beginPath(); ctx.arc(size * 0.5, size * 0.5, r, 0, Math.PI * 2); ctx.stroke();
       }
-      ctx.fillStyle = 'rgba(255,255,255,0.85)';
-      ctx.beginPath(); ctx.arc(size * 0.5, size * 0.24, size * 0.05, 0, Math.PI * 2); ctx.fill();
-      // ロングマフラー
-      ctx.fillStyle = '#c94f5c';
-      ctx.fillRect(size * 0.32, size * 0.72, size * 0.36, size * 0.07);
-      // 大きな優しいタレ目
-      eyesAndMouth(ctx, size, size * 0.5, size * 0.54, size * 0.055, '#8a5a2e');
-    },
-    bonbon(ctx, size) {
-      radialBg(ctx, size);
-      shadeCircle(ctx, size * 0.5, size * 0.5, size * 0.32, '#ffffff');
-      ctx.fillStyle = '#ff5d7a';
-      for (let i = 0; i < 8; i++) {
-        const a = (i / 8) * Math.PI * 2;
-        ctx.save();
-        ctx.translate(size * 0.5 + Math.cos(a) * size * 0.16, size * 0.5 + Math.sin(a) * size * 0.16);
-        ctx.rotate(a);
-        ctx.fillRect(-size * 0.03, -size * 0.12, size * 0.06, size * 0.12);
-        ctx.restore();
-      }
-      // 丸い突起(少なめ)
-      ctx.fillStyle = '#ffe066';
-      for (const [dx, dy] of [[0, -0.3], [0.24, -0.1], [-0.24, -0.1]]) {
-        ctx.beginPath(); ctx.arc(size * (0.5 + dx), size * (0.5 + dy), size * 0.05, 0, Math.PI * 2); ctx.fill();
-      }
-      // ヘッドバンド
-      ctx.strokeStyle = 'rgba(255,224,102,0.9)';
+      // 口ヒゲ
+      ctx.strokeStyle = '#fff6e0';
       ctx.lineWidth = size * 0.03;
-      ctx.beginPath(); ctx.arc(size * 0.5, size * 0.5, size * 0.34, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke();
-      eyesAndMouth(ctx, size, size * 0.5, size * 0.52, size * 0.045, '#d63b5c');
+      ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(size * 0.4, size * 0.6); ctx.lineTo(size * 0.3, size * 0.66); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(size * 0.6, size * 0.6); ctx.lineTo(size * 0.7, size * 0.66); ctx.stroke();
+      // モノクル
+      ctx.strokeStyle = 'rgba(212,175,55,0.9)';
+      ctx.lineWidth = size * 0.02;
+      ctx.beginPath(); ctx.arc(size * 0.58, size * 0.48, size * 0.075, 0, Math.PI * 2); ctx.stroke();
+      eyesAndMouth(ctx, size, size * 0.5, size * 0.48, size * 0.045, '#5a3a20');
+    },
+    ginja(ctx, size) {
+      radialBg(ctx, size);
+      shadeCircle(ctx, size * 0.5, size * 0.5, size * 0.3, '#a86a34');
+      // アイシングの隈取り
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+      ctx.lineWidth = size * 0.025;
+      ctx.beginPath(); ctx.arc(size * 0.5 - size * 0.13, size * 0.48, size * 0.1, 0.2 * Math.PI, 0.9 * Math.PI); ctx.stroke();
+      ctx.beginPath(); ctx.arc(size * 0.5 + size * 0.13, size * 0.48, size * 0.1, 0.1 * Math.PI, 0.8 * Math.PI); ctx.stroke();
+      // ミント帯
+      ctx.fillStyle = '#7fe0c0';
+      ctx.fillRect(size * 0.3, size * 0.68, size * 0.4, size * 0.07);
+      eyesAndMouth(ctx, size, size * 0.5, size * 0.46, size * 0.04, '#3a2410');
     },
   };
 
   function drawPortrait(ctx, id, size) {
-    const fn = portraitDrawers[id] || portraitDrawers.macaron;
+    const fn = portraitDrawers[id] || portraitDrawers.kurumu;
     fn(ctx, size);
   }
 

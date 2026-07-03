@@ -152,7 +152,9 @@ Game.Course = class Course {
     // 路面 + 路肩
     const roadMesh = this.buildStrip(-1, 1, this.roadTexture(c), 0, (t) => !this.inZone(this.gaps, t));
     g.add(roadMesh);
-    const offMat = new THREE.MeshLambertMaterial({ color: c.offroad, side: THREE.DoubleSide });
+    const offMat = new THREE.MeshLambertMaterial({
+      color: Game.mats ? Game.mats.col(c.offroad) : c.offroad, side: THREE.DoubleSide,
+    });
     const skirtOk = (t) => !this.inZone(this.gaps, t) && !this.inZone(this.fallZones, t);
     const skirtR = this.buildStrip(1, 1 + this.offroadWidth / 7, offMat, -0.02, skirtOk, true);
     const skirtL = this.buildStrip(-1 - this.offroadWidth / 7, -1, offMat, -0.02, skirtOk, true);
@@ -294,7 +296,9 @@ Game.Course = class Course {
       const h = 34 + rnd() * 55;
       const cone = new THREE.Mesh(
         new THREE.ConeGeometry(45 + rnd() * 55, h, 7),
-        new THREE.MeshLambertMaterial({ color: gcol.clone().lerp(fcol, 0.45 + rnd() * 0.2) })
+        new THREE.MeshLambertMaterial({
+          color: gcol.clone().lerp(fcol, 0.45 + rnd() * 0.2).convertSRGBToLinear(),
+        })
       );
       cone.position.set(Math.cos(a) * r, h / 2 - 8, Math.sin(a) * r);
       grp.add(cone);
