@@ -43,9 +43,9 @@
     flagChainFlags: 9,
     banners: [
       { t: 0.045, side: 1, text: 'STAR KART GP' },
-      { t: 0.30, side: -1, text: 'TURBO WAFFLE' },
-      { t: 0.62, side: 1, text: 'Soda Splash Racing' },
-      { t: 0.90, side: -1, text: 'COOKIE TOWN' },
+      { t: 0.30, side: -1, text: 'ASTRO GEAR' },
+      { t: 0.62, side: 1, text: 'COMET FUEL' },
+      { t: 0.90, side: -1, text: 'NEON HARBOR' },
     ],
     noboriSpots: [0.20, 0.40, 0.56, 0.78, 0.93],
     millSpot: 0.145,             // 風車クッキーミル(ランドマーク)の進行度
@@ -81,24 +81,30 @@
   ];
 
   Game.courses.cookieTown = {
-    id: 'cookieTown',
-    displayName: 'クッキータウン・ロード',
-    bgmMood: 'ほのぼの弾む街角ポップス調',
-    name: 'クッキータウン・ロード',
+    id: 'cookieTown', // idはセーブ互換のため維持
+    displayName: 'ネオンハーバー',
+    bgmMood: '夕暮れの港町を走る軽快なシティポップ調',
+    name: 'ネオンハーバー',
     controlPoints,
     offroadWidth: 7,
     fogDensity: 0.0032,
     // リアル寄りの屋外レース感: 青空+緑の草原+アスファルト。
     // クッキーの家や街灯は「郊外の道沿いのお菓子の街」として残る
+    // STAR KART世界観: 夕暮れの港町ネオン。紫がかった空にシアンの縁石が映える
     colors: {
-      sky: 0x7fc0ee,
-      fog: 0xcfe6f5,
-      ground: 0x58a53f,
-      road: '#55555e',
+      sky: 0x4a4a8e,
+      fog: 0x8a7fae,
+      ground: 0x3f6a4a,
+      road: '#4e4e58',
       edge: '#fff3df',
-      curb: '#ff6f91',
+      curb: '#3adfe8',
       centerLine: '#eec53a',
-      offroad: 0x69b84e,
+      offroad: 0x4a7a52,
+    },
+    lighting: {
+      hemiSky: 0x9a94d8, hemiGround: 0x3a3550, hemiIntensity: 0.5,
+      sunColor: 0xff9a58, sunIntensity: 0.9,
+      rimColor: 0x66ccff, exposure: 1.1,
     },
     // ブーストパッド2箇所: S字明け(コーナー進入前の加速)と広い直線
     boostPads: [

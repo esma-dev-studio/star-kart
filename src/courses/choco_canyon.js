@@ -54,9 +54,9 @@ Game.courses = Game.courses || {};
     flagChainSpots: [0.08, 0.62],
     flagChainFlags: 8,
     banners: [
-      { t: 0.045, side: 1, text: 'TURBO WAFFLE' },
-      { t: 0.50, side: -1, text: 'Choco Canyon Rally' },
-      { t: 0.90, side: 1, text: 'CARAMEL PEAK' },
+      { t: 0.045, side: 1, text: 'NOVA TIRES' },
+      { t: 0.50, side: -1, text: 'Meteor Ridge Rally' },
+      { t: 0.90, side: 1, text: 'METEOR PEAK' },
     ],
     noboriSpots: [0.16, 0.72, 0.88],
     caramelArchSpots: [0.245, 0.735], // 道路をまたぐキャラメル岩アーチ(2箇所)
@@ -451,8 +451,8 @@ Game.courses = Game.courses || {};
 
   Game.courses.chocoCanyon = {
     id: 'chocoCanyon',
-    displayName: 'チョコレート・キャニオン',
-    bgmMood: 'パーカッションが響く冒険オーケストラ調',
+    displayName: 'メテオリッジ',
+    bgmMood: 'パーカッションが響く夕陽の峡谷アドベンチャー調',
     name: 'チョコレート・キャニオン',
     controlPoints,
     offroadWidth: 6,

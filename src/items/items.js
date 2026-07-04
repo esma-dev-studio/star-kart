@@ -41,17 +41,18 @@ const ITEM_TUNING = {
   rouletteCycleSec: 0.09,     // ルーレット演出の切替間隔(HUD側で見た目を作る想定、内部状態のみ管理)
 };
 
+// STAR KART世界観のアイテム名(idは互換のため旧名のまま)
 const ITEM_DEFS = {
-  honey: { name: 'はちみつブースト', color: 0xffb703, tier: 'common' },
-  scone: { name: 'いちごスコーン弾', color: 0xff5d8f, tier: 'common' },
-  caramel: { name: 'キャラメルトラップ', color: 0xb9722a, tier: 'common' },
-  marshmallow: { name: '追尾マシュマロ', color: 0xfff2f7, tier: 'uncommon' },
-  shield: { name: 'クッキーシールド', color: 0xd9a15c, tier: 'uncommon' },
-  lemon: { name: 'サワーレモン爆弾', color: 0xe6f24a, tier: 'uncommon' },
-  star: { name: 'スターゼリー', color: 0xffe14d, tier: 'rare' },
-  soda: { name: 'ソーダの嵐', color: 0x6fd8ff, tier: 'rare' },
-  rainbow: { name: 'レインボースプリンクル', color: 0xff8fd8, tier: 'rare' },
-  parfait: { name: 'ミラクルパフェ', color: 0xffc2e0, tier: 'rare' },
+  honey: { name: 'コメットブースト', color: 0xffb703, tier: 'common' },
+  scone: { name: 'ミサイルスター', color: 0xff5d8f, tier: 'common' },
+  caramel: { name: 'グラビティトラップ', color: 0xb9722a, tier: 'common' },
+  marshmallow: { name: 'ホーミングコメット', color: 0xfff2f7, tier: 'uncommon' },
+  shield: { name: 'オービットシールド', color: 0xd9a15c, tier: 'uncommon' },
+  lemon: { name: 'ノヴァボム', color: 0xe6f24a, tier: 'uncommon' },
+  star: { name: 'スーパーノヴァ', color: 0xffe14d, tier: 'rare' },
+  soda: { name: 'スターダストストーム', color: 0x6fd8ff, tier: 'rare' },
+  rainbow: { name: 'ギャラクシーラッシュ', color: 0xff8fd8, tier: 'rare' },
+  parfait: { name: 'トリプルチャージ', color: 0xffc2e0, tier: 'rare' },
 };
 
 (function () {
