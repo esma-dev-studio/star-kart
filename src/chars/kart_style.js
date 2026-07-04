@@ -154,49 +154,127 @@
     return sparks;
   }
 
+  // ==================== Wheelコンポーネント ====================
+  // タイヤ=48分割の円形(トレッド+ショルダーリング)、金属リム、立体スポーク、ハブ、
+  // ブレーキディスク(非回転)、高速時ブラーディスク、ブースト発光リングで構成。
+  // 「三角形・多角形・プロペラに見える回転物」を全廃するための共通部品。
+  const WHEEL_SEG = 48;
+  const wheelGeoCache = {};
+  function wheelGeos(r, w) {
+    const key = r.toFixed(3) + '_' + w.toFixed(3);
+    if (wheelGeoCache[key]) return wheelGeoCache[key];
+    const g = {
+      tread: new THREE.CylinderGeometry(r, r, w * 0.6, WHEEL_SEG),
+      shoulder: new THREE.TorusGeometry(r * 0.86, r * 0.145, 12, 40),
+      rim: new THREE.CylinderGeometry(r * 0.6, r * 0.6, w * 1.02, 40),
+      spoke: new THREE.BoxGeometry(r * 0.95, r * 0.17, w * 0.4),
+      hub: new THREE.CylinderGeometry(r * 0.2, r * 0.2, w * 1.12, 24),
+      cap: new THREE.CylinderGeometry(r * 0.09, r * 0.09, w * 1.18, 16),
+      brake: new THREE.CylinderGeometry(r * 0.44, r * 0.44, 0.02, 32),
+      blur: new THREE.CircleGeometry(r * 0.97, WHEEL_SEG),
+      boostRing: new THREE.TorusGeometry(r * 1.05, r * 0.05, 8, 40),
+    };
+    wheelGeoCache[key] = g;
+    return g;
+  }
+
+  function blurTexture() {
+    if (blurTexture._tex) return blurTexture._tex;
+    const cv = document.createElement('canvas');
+    cv.width = 64; cv.height = 64;
+    const x = cv.getContext('2d');
+    // 放射ブラー風: ごく薄い同心のグレー弧(強すぎると的のように見えるので控えめに)
+    for (let i = 0; i < 4; i++) {
+      x.strokeStyle = 'rgba(210,210,218,' + (0.26 - i * 0.05) + ')';
+      x.lineWidth = 2.5 + i * 0.8;
+      x.beginPath();
+      x.arc(32, 32, 10 + i * 6.0, 0, Math.PI * 2);
+      x.stroke();
+    }
+    blurTexture._tex = new THREE.CanvasTexture(cv);
+    return blurTexture._tex;
+  }
+
+  // 1輪を組み立てる。spinner内=回転する実体、pivot直下=非回転(ブレーキ/ブラー/ブーストリング)
+  function makeWheel(tilt, x, z, front, opts = {}) {
+    const r = opts.r ?? (front ? KS.wheelFrontR : KS.wheelRearR);
+    const w = opts.w ?? (front ? KS.wheelFrontW : KS.wheelRearW);
+    const geos = wheelGeos(r, w);
+    const rubber = Game.mats.rubber();
+    const rim = Game.mats.metal(opts.rimColor ?? 0xb9bec9);
+    const pivot = new THREE.Group();
+    pivot.position.set(x, r, z);
+    const spinner = new THREE.Group();
+
+    const tread = new THREE.Mesh(geos.tread, rubber);
+    tread.rotation.z = Math.PI / 2;
+    spinner.add(tread);
+    for (const sx of [-1, 1]) {
+      const sh = new THREE.Mesh(geos.shoulder, rubber);
+      sh.rotation.y = Math.PI / 2;
+      sh.position.x = sx * w * 0.24;
+      spinner.add(sh);
+    }
+    const rimMesh = new THREE.Mesh(geos.rim, rim);
+    rimMesh.rotation.z = Math.PI / 2;
+    spinner.add(rimMesh);
+    // 立体スポーク: バー3本を60°ずつ回して6本スポーク相当に
+    const spokesMat = Game.mats.metal(opts.rimColor ?? 0xd8dce4);
+    spokesMat.transparent = true;
+    for (let i = 0; i < 3; i++) {
+      const sp = new THREE.Mesh(geos.spoke, spokesMat);
+      sp.rotation.x = (Math.PI / 3) * i;
+      spinner.add(sp);
+    }
+    const hub = new THREE.Mesh(geos.hub, rim);
+    hub.rotation.z = Math.PI / 2;
+    spinner.add(hub);
+    const cap = new THREE.Mesh(geos.cap, Game.mats.glow(opts.glowColor ?? 0xffd166, 0.8));
+    cap.rotation.z = Math.PI / 2;
+    spinner.add(cap);
+    pivot.add(spinner);
+
+    // ブレーキディスク(車体側=非回転で内側に見える)
+    const brake = new THREE.Mesh(geos.brake, Game.mats.metal(0x55565e));
+    brake.rotation.z = Math.PI / 2;
+    brake.position.x = (x < 0 ? 1 : -1) * w * 0.2;
+    pivot.add(brake);
+
+    // 高速時の放射ブラーディスク(非回転・薄く重ねる)
+    const blur = new THREE.Mesh(geos.blur, new THREE.MeshBasicMaterial({
+      map: blurTexture(), transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide,
+    }));
+    blur.rotation.y = Math.PI / 2;
+    blur.position.x = (x < 0 ? -1 : 1) * (w * 0.52);
+    blur.visible = false;
+    pivot.add(blur);
+
+    // ブースト時の発光リング
+    const boostRing = new THREE.Mesh(geos.boostRing, Game.mats.glow(opts.glowColor ?? 0xffa030, 1.6));
+    boostRing.rotation.y = Math.PI / 2;
+    boostRing.visible = false;
+    pivot.add(boostRing);
+
+    tilt.add(pivot);
+    return { pivot, spinner, front, radius: r, spokesMat, blur, boostRing };
+  }
+
   // 通常の丸タイヤ4輪(前細・後太)。戻り値をkart._wheelsへ。
-  function makeRoundWheels(tilt, rimMat, rubberMat) {
-    const wheels = [];
+  function makeRoundWheels(tilt, rimMat, rubberMat, opts = {}) {
+    const rimColor = rimMat && rimMat.color ? rimMat.color.getHex() : undefined;
     const wheelDefs = [
       [-KS.wheelFrontX, KS.wheelFrontZ, true],
       [KS.wheelFrontX, KS.wheelFrontZ, true],
       [-KS.wheelRearX, KS.wheelRearZ, false],
       [KS.wheelRearX, KS.wheelRearZ, false],
     ];
-    for (const [x, z, front] of wheelDefs) {
-      const r = front ? KS.wheelFrontR : KS.wheelRearR;
-      const w = front ? KS.wheelFrontW : KS.wheelRearW;
-      const pivot = new THREE.Group();
-      pivot.position.set(x, r, z);
-      const spinner = new THREE.Group();
-      const wheel = new THREE.Mesh(new THREE.CylinderGeometry(r, r, w, 14), rubberMat);
-      wheel.rotation.z = Math.PI / 2;
-      spinner.add(wheel);
-      const hub = new THREE.Mesh(
-        new THREE.CylinderGeometry(r * KS.hubScale, r * KS.hubScale, w + 0.04, 10), rimMat);
-      hub.rotation.z = Math.PI / 2;
-      spinner.add(hub);
-      pivot.add(spinner);
-      tilt.add(pivot);
-      wheels.push({ pivot, spinner, front });
-    }
-    return wheels;
+    return wheelDefs.map(([x, z, front]) => makeWheel(tilt, x, z, front, { rimColor, ...opts }));
   }
 
-  // 契約上4つの「ホイール相当」ノードが必要だが見た目はカスタムなケース向け。
-  // buildFn(x,z,front) が {pivot,spinner} を返す想定。
-  function makeCustomWheels(tilt, positions, buildFn) {
-    const wheels = [];
-    for (const [x, z, front] of positions) {
-      const pivot = new THREE.Group();
-      pivot.position.set(x, 0, z);
-      const spinner = new THREE.Group();
-      buildFn(spinner, x, z, front);
-      pivot.add(spinner);
-      tilt.add(pivot);
-      wheels.push({ pivot, spinner, front });
-    }
-    return wheels;
+  // 旧カスタムホイールAPI互換。羽根型・星型など「回すとプロペラに見える」造形は廃止し、
+  // 位置指定だけ活かして全て共通のWheelコンポーネントで組む(buildFnは無視)。
+  function makeCustomWheels(tilt, positions, buildFn, opts = {}) {
+    return positions.map(([x, z, front]) => makeWheel(tilt, x, z, front, opts));
   }
 
   function buildFlamesAt(tilt, positions, kart, boostColor) {

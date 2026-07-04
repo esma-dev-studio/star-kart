@@ -492,11 +492,22 @@ Game.Kart = class Kart {
     this._tilt.rotation.x = v.pitch;
     this._tilt.rotation.z = v.roll;
 
-    // ホイール
-    v.wheelSpin += (this.speed / 0.42) * dt;
+    // ホイール: 回転量 = 走行距離 ÷ タイヤ半径(車速と物理的に一致させる)
     for (const w of this._wheels) {
-      w.spinner.rotation.x = v.wheelSpin;
+      const r = w.radius || 0.42;
+      w.spin = (w.spin || 0) + (this.speed * dt) / r;
+      w.spinner.rotation.x = w.spin;
       if (w.front) w.pivot.rotation.y = U.damp(w.pivot.rotation.y, steer * 0.35, 10, dt);
+      // 高速時: スポークをフェードさせ、放射ブラーディスクを薄く重ねる(プロペラ見え防止)
+      const angVel = Math.abs(this.speed) / r; // rad/s
+      const blurK = U.clamp((angVel - 20) / 34, 0, 1);
+      if (w.spokesMat) w.spokesMat.opacity = 1 - blurK * 0.6;
+      if (w.blur) {
+        w.blur.visible = blurK > 0.03;
+        if (w.blur.visible) w.blur.material.opacity = blurK * 0.3;
+      }
+      // ブースト中はタイヤ外周に発光リング
+      if (w.boostRing) w.boostRing.visible = this.boostT > 0;
     }
 
     // ブースト炎/ドリフト火花
