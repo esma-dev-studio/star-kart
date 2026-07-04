@@ -93,6 +93,10 @@
     touchstart単独経路+ポーズ3ボタン+復帰+8台完走回帰+audit 9PASS/0FAILまで通した
   * **教訓: push直後に完了報告しない。Pagesビルドのstatus=builtと公開URLの中身
     (curlでコード断片を確認)まで見てから報告する**
+  * 根本原因の裏取り: 05418eaのPagesビルドは「Page build failed.」で**errored**していた
+    (エラー時は前回デプロイが生き続ける=ユーザーは修正前の版を試していた)。
+    Jekyll処理を丸ごと無効化する `.nojekyll` を追加して再発面を除去
+    (このサイトは静的配信のみでJekyllは不要)
 
 ## 残作業・今後の拡張候補
 
