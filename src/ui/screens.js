@@ -900,8 +900,13 @@
     // =========================================================
     _buildRaceLayer() {
       const layer = el('div', 'layer');
-      // HUDはid=hud(既存グローバルDOM)側に描画される想定なのでここでは3D描画+ポーズオーバーレイのみ
+      // 重要: レースレイヤーは全画面だが中身はポーズオーバーレイだけなので、
+      // レイヤー自体は入力を素通しにする(inline styleは .layer.active のCSSより優先される)。
+      // これをしないと、タッチ操作ボタン(#touchRoot)への入力をこのレイヤーが全て吸い込み、
+      // iPad/スマホで「ボタンが見えるのに反応しない」状態になる
+      layer.style.pointerEvents = 'none';
       const overlay = el('div', 'sg-pause-overlay hidden');
+      overlay.style.pointerEvents = 'auto'; // ポーズメニューだけは入力を受け付ける
       const box = el('div', 'sg-pause-box');
       box.appendChild(el('div', 'sg-heading', 'ポーズ中'));
       const resumeBtn = el('div', 'sg-btn', '再開する');

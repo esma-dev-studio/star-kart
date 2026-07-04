@@ -6,7 +6,12 @@
 <title>スターカート</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 100%; height: 100%; overflow: hidden; background: #ffd9ec; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden; background: #ffd9ec;
+    overscroll-behavior: none;      /* iOSのバウンススクロール防止 */
+    touch-action: manipulation;      /* ダブルタップズーム等の既定ジェスチャを抑止 */
+    -webkit-user-select: none; user-select: none;
+  }
   body { font-family: 'Segoe UI', 'Hiragino Maru Gothic ProN', 'Yu Gothic UI', sans-serif; }
   #app { position: fixed; inset: 0; }
   #app canvas { display: block; }
