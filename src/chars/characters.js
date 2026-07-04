@@ -35,29 +35,23 @@
   ];
 
   // キャラごとのマウントスケール(小柄0.95〜大柄1.25)
+  // 体格差を強調: 小柄(0.85)〜巨漢(1.45)の幅で「軽量級/重量級」がひと目で分かるように
   const MOUNT_SCALE = {
-    kurumu: 0.95,
-    rupo: 1.0,
-    donga: 1.25,
+    kurumu: 0.85,
+    rupo: 0.95,
+    donga: 1.45,
     volt8: 1.05,
     shizuku: 1.0,
-    gumiras: 1.22,
-    noir: 1.1,
-    baumjii: 1.1,
-    ginja: 0.95,
+    gumiras: 1.32,
+    noir: 1.15,
+    baumjii: 1.15,
+    ginja: 0.88,
   };
 
   function build(id) {
     const g = Game.charBuilder.build(id);
-    // 向き補正: noir/volt8のモデルは-Z向きに組まれているため、内容を内側グループに包んで反転する
-    // (ルートのrotationはリグ/マウントが使うので触らない。parts参照は同一オブジェクトなので維持される)
-    if (id === 'noir' || id === 'volt8') {
-      const inner = new THREE.Group();
-      inner.name = 'facingFix';
-      while (g.children.length) inner.add(g.children[0]);
-      inner.rotation.y = Math.PI;
-      g.add(inner);
-    }
+    // (注: 旧WIP版は一部キャラが-Z向きだったが、最終版ビルダーは全キャラ+Z向きで統一済み。
+    //  反転フィックスは不要になったため撤去した)
     // アニメ用ランタイム状態の初期化(character_rig.animate/setPose/setExpressionが参照)
     g.userData.anim = {
       expr: 'normal',

@@ -535,12 +535,13 @@
     const armL = addArm(g, -0.46, 0.84, 0, -1, M.rock, { len: 0.3, radius: 0.11 });
     const armR = addArm(g, 0.5, 0.9, 0, 1, M.rock, { len: 0.44, radius: 0.16 });
     // 拳(blobの岩)
-    const fistL = new THREE.Mesh(Game.geo.blob(0.12, { noise: 0.22, seed: 11, widthSeg: 12, heightSeg: 10 }), M.rockDark);
-    fistL.position.set(-0.6, 0.32, 0.12);
+    // 拳は腕の終端に「めり込ませて」接続する(離すと浮いた球に見えてチープ)
+    const fistL = new THREE.Mesh(Game.geo.blob(0.13, { noise: 0.22, seed: 11, widthSeg: 12, heightSeg: 10 }), M.rockDark);
+    fistL.position.set(-0.57, 0.5, 0.12);
     fistL.castShadow = true;
     g.add(fistL);
-    const fistR = new THREE.Mesh(Game.geo.blob(0.19, { noise: 0.22, seed: 12, widthSeg: 14, heightSeg: 10 }), M.rockDark);
-    fistR.position.set(0.62, 0.16, 0.22);
+    const fistR = new THREE.Mesh(Game.geo.blob(0.2, { noise: 0.22, seed: 12, widthSeg: 14, heightSeg: 10 }), M.rockDark);
+    fistR.position.set(0.66, 0.44, 0.2);
     fistR.castShadow = true;
     g.add(fistR);
 
@@ -661,10 +662,12 @@
     body.castShadow = true;
     g.add(body);
 
-    // 体内の光る核
-    const core = new THREE.Mesh(new THREE.SphereGeometry(0.09, 12, 12), M.core);
-    core.position.y = 0.68;
+    // 体内の光る核(存在感の要: 大きめ+ボディの透けを抑えてゴースト化を防ぐ)
+    const core = new THREE.Mesh(new THREE.SphereGeometry(0.13, 14, 12), M.core);
+    core.position.y = 0.66;
     g.add(core);
+    if (M.body.transparent) M.body.opacity = Math.max(M.body.opacity, 0.78);
+    if (M.drop.transparent) M.drop.opacity = Math.max(M.drop.opacity, 0.62);
 
     const eyes = addEyes(g, 0.86, 0.2, 0.09, 0.058, M.eyeIris);
     const mouths = addMouthSet(g, 0.78, 0.24, 0.11, 0.08);
