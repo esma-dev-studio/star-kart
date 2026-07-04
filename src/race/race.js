@@ -149,6 +149,15 @@
       kart._lapProgress = lapProgress;
       kart.raceProgress = lapProgress;
 
+      // 逆走検知(プレイヤーのみ): progressが継続的に後退している時に警告フラグを立てる。
+      // リスポーンの巻き戻りは1フレームの跳びなので、継続時間しきい値で誤検知しない
+      if (kart === this.playerKart && !kart.finished) {
+        const dt = this._dt || (1 / 60);
+        if (delta < -0.00015 && Math.abs(kart.speed) > 4) this._wrongT = (this._wrongT || 0) + dt;
+        else this._wrongT = Math.max(0, (this._wrongT || 0) - dt * 2);
+        this.playerWrongWay = this._wrongT > 1.0;
+      }
+
       const newLap = Game.U.clamp(Math.floor(lapProgress) + 1, 1, this.laps);
       if (newLap > kart.lap && !kart.finished) {
         kart.lap = newLap;
@@ -212,6 +221,7 @@
       if (this.phase === 'finished') return;
 
       this.raceTime += dt;
+      this._dt = dt;
 
       const karts = this.entries.map((e) => e.kart);
       for (const e of this.entries) {

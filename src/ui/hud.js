@@ -359,6 +359,14 @@
         <div id="hudRank" class="hud-num"></div>
         <div id="hudSpeedWrap"><canvas id="hudSpeedCanvas"></canvas></div>
         <div id="hudSpeedLines"></div>
+        <div id="hudWrongWay" style="
+          position:absolute; top:22%; left:50%; transform:translateX(-50%);
+          font-size:40px; font-weight:900; font-style:italic; color:#fff;
+          background:linear-gradient(100deg, rgba(200,30,50,0.92), rgba(140,10,30,0.92));
+          border:2px solid rgba(255,255,255,0.8); border-radius:10px;
+          padding:8px 34px; letter-spacing:3px; display:none;
+          animation: hudWrongPulse 0.5s ease-in-out infinite alternate;">⚠ 逆走中!</div>
+        <style>@keyframes hudWrongPulse { from { opacity: 0.75; } to { opacity: 1; transform: translateX(-50%) scale(1.04); } }</style>
       `;
       hudEl.appendChild(root);
       this._root = root;
@@ -372,6 +380,7 @@
         queue: root.querySelector('#hudQueue'),
         rank: root.querySelector('#hudRank'),
         speedLines: root.querySelector('#hudSpeedLines'),
+        wrongWay: root.querySelector('#hudWrongWay'),
       };
 
       this._mmCanvas = root.querySelector('#hudMinimap');
@@ -479,6 +488,12 @@
       this._updateMinimap();
       this._updateSpeedGauge(kart, dt);
       this._updateSpeedLines(kart);
+      // 逆走警告(RaceManagerが検知)
+      const ww = !!race.playerWrongWay;
+      if (ww !== this._lastWrongWay) {
+        this._els.wrongWay.style.display = ww ? 'block' : 'none';
+        this._lastWrongWay = ww;
+      }
     },
 
     _updateRank(kart) {

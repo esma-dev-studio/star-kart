@@ -169,8 +169,14 @@ Game.Course = class Course {
     g.add(startLine);
     g.add(this.buildGate());
 
-    // 急コーナーの外側にシェブロン看板(コーナー予告+レース感)
-    for (const m of this.buildCornerSigns()) g.add(m);
+    // 構造検証(問題があればconsole.warnに詳細を出す)
+    this.validate();
+
+    // 走行ルートの視線誘導一式(すべて中心線から生成し、見た目と判定のズレを防ぐ)
+    for (const m of this.buildCornerSigns()) g.add(m); // カーブ外側のシェブロン(手前から)
+    g.add(this.buildGuardrails());                     // 急カーブ外側の連続ガードレール
+    g.add(this.buildRoadArrows());                     // 路面の進行方向矢印
+    g.add(this.buildCrossingDecor());                  // 立体交差の橋脚・縁梁(橋として明確化)
 
     if (this.def.decorate) this.def.decorate(g, this);
 
@@ -418,39 +424,243 @@ Game.Course = class Course {
     return new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: tex }));
   }
 
+  // ==================== コース検証(CourseValidator) ====================
+  // 生成後に構造品質を自動チェックする。問題があればconsole.warnし、レポートを返す。
+  // チェック項目: 自己近接(立体交差の高さ余白)/急ヘアピン曲率/急勾配/高曲率区間の道幅
+  validate() {
+    const s = this.spline;
+    const issues = [];
+    this._crossings = [];
+    // 1) 自己近接: 離れた区間同士がXZで接近している箇所
+    //    Y差6以上=正常な立体交差(橋演出の対象)、6未満=不正な重なり
+    for (let i = 0; i < s.count; i += 2) {
+      for (let j = i + 26; j < s.count; j += 2) {
+        const gap = Math.min(j - i, s.count - (j - i));
+        if (gap < 26) continue;
+        const a = s.pts[i], b = s.pts[j];
+        const dXZ = Math.hypot(a.x - b.x, a.z - b.z);
+        if (dXZ < s.w[i] + s.w[j] + 1.5) {
+          const dy = Math.abs(a.y - b.y);
+          // 問題になるのは2パターン:
+          //  A) ほぼ同じ高さで並走/交差(dy<3)= どちらの道か分からない・ちらつき
+          //  B) ほぼ真上を通る(路面同士が重なる距離)のにクリアランス不足(dy<6)= 天井スレスレ
+          const directlyOver = dXZ < (s.w[i] + s.w[j]) * 0.6;
+          // ヘアピンの両脚(接線が反平行で、コース上の距離が近い)は頂点付近で近づくのが正常。
+          // 路面同士が実際に重なる場合のみ問題として扱う
+          const dot = s.tan[i].x * s.tan[j].x + s.tan[i].z * s.tan[j].z;
+          const isHairpinLegs = dot < -0.5 && gap < 90;
+          const tooClose = isHairpinLegs ? dXZ < (s.w[i] + s.w[j]) * 0.55 : true;
+          if (dy < 3 && tooClose) {
+            issues.push({ type: 'overlap', at: [i, j], dXZ: +dXZ.toFixed(1), dy: +dy.toFixed(1),
+              msg: `区間${i}と${j}が同一高度(差${dy.toFixed(1)})で近接している` });
+          } else if (dy < 6 && directlyOver) {
+            issues.push({ type: 'lowClearance', at: [i, j], dXZ: +dXZ.toFixed(1), dy: +dy.toFixed(1),
+              msg: `区間${i}の真上を区間${j}が高さ差${dy.toFixed(1)}で跨いでいる(6以上必要)` });
+          } else if (dy >= 6 && directlyOver) {
+            this._crossings.push({ low: a.y < b.y ? i : j, high: a.y < b.y ? j : i, dy });
+          }
+        }
+      }
+    }
+    // 2) ヘアピン曲率: 5サンプル窓の回転半径 r=ds/dθ が8未満なら急すぎ
+    for (let i = 0; i < s.count; i += 2) {
+      const a0 = s.tangentAngle((i - 3 + s.count) % s.count);
+      const a1 = s.tangentAngle((i + 3) % s.count);
+      const dTheta = Math.abs(Game.U.wrapAngle(a1 - a0));
+      if (dTheta > 0.01) {
+        const r = (6 * s.step) / dTheta;
+        if (r < 8) {
+          issues.push({ type: 'tightCurve', at: i, radius: +r.toFixed(1),
+            msg: `サンプル${i}付近の回転半径${r.toFixed(1)}が急すぎる(8以上推奨)` });
+          i += 10;
+        } else if (r < 14 && s.w[i] < 6.5) {
+          issues.push({ type: 'narrowCurve', at: i, w: +s.w[i].toFixed(1),
+            msg: `サンプル${i}付近: 急カーブなのに道幅${s.w[i].toFixed(1)}(6.5以上推奨)` });
+          i += 10;
+        }
+      }
+    }
+    // 3) 急勾配
+    for (let i = 0; i < s.count; i += 2) {
+      const a = s.pts[i], b = s.pts[(i + 2) % s.count];
+      const slope = Math.abs(b.y - a.y) / (2 * s.step);
+      if (slope > 0.35) {
+        issues.push({ type: 'steep', at: i, slope: +slope.toFixed(2),
+          msg: `サンプル${i}付近の勾配${(slope * 100).toFixed(0)}%が急すぎる` });
+        i += 8;
+      }
+    }
+    if (issues.length) {
+      console.warn(`[CourseValidator] ${this.name}: ${issues.length}件の問題`, issues);
+    }
+    this.validationIssues = issues;
+    return issues;
+  }
+
+  // コーナー検出(シェブロン/ガードレール/路面矢印が共用)
+  detectCorners() {
+    if (this._corners) return this._corners;
+    const s = this.spline;
+    const SPAN = 8, THRESH = 0.55;
+    const out = [];
+    let i = 0;
+    while (i < s.count) {
+      const a0 = s.tangentAngle((i - SPAN + s.count) % s.count);
+      const a1 = s.tangentAngle((i + SPAN) % s.count);
+      const k = Game.U.wrapAngle(a1 - a0);
+      if (Math.abs(k) > THRESH) {
+        out.push({ idx: i, k });
+        i += 40;
+        continue;
+      }
+      i += 4;
+    }
+    this._corners = out;
+    return out;
+  }
+
+  // 急コーナー外側の連続ガードレール(支柱+レール。中心線から生成)
+  buildGuardrails() {
+    const s = this.spline;
+    const grp = new THREE.Group();
+    const postMat = Game.mats ? Game.mats.metal(0xc8ccd4) : new THREE.MeshLambertMaterial({ color: 0xc8ccd4 });
+    const railMat = Game.mats ? Game.mats.paint(0xe84860) : new THREE.MeshLambertMaterial({ color: 0xe84860 });
+    for (const c of this.detectCorners()) {
+      const outSide = c.k > 0 ? 1 : -1;
+      // カーブ入口の約25ユニット手前(≈16サンプル)からレールを張る
+      const from = (c.idx - 16 + s.count) % s.count;
+      const len = 30;
+      const pts = [];
+      for (let n = 0; n <= len; n += 2) {
+        const idx = (from + n) % s.count;
+        const t = idx / s.count;
+        if (this.inZone(this.gaps, t) || this.inZone(this.fallZones, t)) continue;
+        const p = s.pts[idx], nr = s.nrm[idx], w = s.w[idx];
+        const off = (w + this.offroadWidth * 0.45) * outSide;
+        pts.push([p.x + nr.x * off, p.y + 0.52, p.z + nr.z * off]);
+        if (n % 6 === 0) {
+          const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 0.55, 8), postMat);
+          post.position.set(p.x + nr.x * off, p.y + 0.27, p.z + nr.z * off);
+          grp.add(post);
+        }
+      }
+      if (pts.length >= 3) {
+        const rail = new THREE.Mesh(Game.geo.tube(pts, 0.07, pts.length * 2, 8), railMat);
+        grp.add(rail);
+      }
+    }
+    return grp;
+  }
+
+  // カーブ手前の路面矢印(曲がる方向を路面に直接描く)
+  buildRoadArrows() {
+    const s = this.spline;
+    const grp = new THREE.Group();
+    const texL = this.roadArrowTexture(true);
+    const texR = this.roadArrowTexture(false);
+    for (const c of this.detectCorners()) {
+      const tex = c.k > 0 ? texL : texR;
+      for (let n = 0; n < 3; n++) {
+        const idx = (c.idx - 18 + n * 7 + s.count) % s.count;
+        const t = idx / s.count;
+        if (this.inZone(this.gaps, t)) continue;
+        const p = s.pts[idx];
+        const arrow = new THREE.Mesh(
+          new THREE.PlaneGeometry(2.6, 2.6),
+          new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false })
+        );
+        arrow.rotation.order = 'YXZ';
+        arrow.rotation.y = s.tangentAngle(idx) + Math.PI; // 進行方向に正対
+        arrow.rotation.x = -Math.PI / 2;
+        arrow.position.set(p.x, p.y + 0.06, p.z);
+        grp.add(arrow);
+      }
+    }
+    return grp;
+  }
+
+  roadArrowTexture(left) {
+    const cv = document.createElement('canvas');
+    cv.width = 64; cv.height = 64;
+    const x = cv.getContext('2d');
+    x.strokeStyle = 'rgba(255,250,235,0.85)';
+    x.lineWidth = 10; x.lineCap = 'round'; x.lineJoin = 'round';
+    x.beginPath();
+    x.moveTo(32, 56);
+    x.lineTo(32, 26);
+    x.quadraticCurveTo(32, 14, left ? 18 : 46, 14);
+    x.stroke();
+    // 矢尻
+    x.beginPath();
+    if (left) { x.moveTo(26, 24); x.lineTo(14, 14); x.lineTo(26, 6); }
+    else { x.moveTo(38, 24); x.lineTo(50, 14); x.lineTo(38, 6); }
+    x.stroke();
+    return new THREE.CanvasTexture(cv);
+  }
+
+  // 正常な立体交差(validateで検出)を「橋」として明確化: 橋脚+縁の梁+下面パネル
+  buildCrossingDecor() {
+    const s = this.spline;
+    const grp = new THREE.Group();
+    const pierMat = Game.mats ? Game.mats.matte(0xb9a58c) : new THREE.MeshLambertMaterial({ color: 0xb9a58c });
+    const beamMat = Game.mats ? Game.mats.paint(0xfff0d8) : new THREE.MeshLambertMaterial({ color: 0xfff0d8 });
+    const used = [];
+    for (const c of (this._crossings || [])) {
+      if (used.some((u) => Math.abs(u - c.high) < 14)) continue;
+      used.push(c.high);
+      // 上側の道の両縁に橋脚を立て、縁に梁を渡す(±2箇所)
+      for (const dIdx of [-6, 6]) {
+        const idx = (c.high + dIdx + s.count) % s.count;
+        const p = s.pts[idx], nr = s.nrm[idx], w = s.w[idx];
+        const lowY = s.pts[c.low].y;
+        for (const side of [-1, 1]) {
+          const px = p.x + nr.x * side * (w + 0.6);
+          const pz = p.z + nr.z * side * (w + 0.6);
+          const h = Math.max(1, p.y - lowY + 1.2);
+          const pier = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.62, h, 12), pierMat);
+          pier.position.set(px, p.y - h / 2, pz);
+          grp.add(pier);
+        }
+      }
+      // 縁の梁(上の道の縁を強調して「橋」に見せる)
+      for (const side of [-1, 1]) {
+        const pts = [];
+        for (let n = -8; n <= 8; n += 2) {
+          const idx = (c.high + n + s.count) % s.count;
+          const p = s.pts[idx], nr = s.nrm[idx], w = s.w[idx];
+          pts.push([p.x + nr.x * side * (w + 0.2), p.y + 0.3, p.z + nr.z * side * (w + 0.2)]);
+        }
+        const beam = new THREE.Mesh(Game.geo.tube(pts, 0.16, 24, 8), beamMat);
+        grp.add(beam);
+      }
+    }
+    return grp;
+  }
+
   // 急コーナーを検出し、外側にシェブロン(矢印)看板を並べる
   buildCornerSigns() {
     const s = this.spline;
     const out = [];
-    const SPAN = 8;        // 曲率評価スパン(サンプル数)
-    const THRESH = 0.55;   // この角度変化(rad)以上を「急コーナー」とみなす
     const postMat = new THREE.MeshLambertMaterial({ color: 0x9a97a8 });
-    let i = 0, placed = 0;
-    while (i < s.count && placed < 6) {
-      const a0 = s.tangentAngle((i - SPAN + s.count) % s.count);
-      const a1 = s.tangentAngle((i + SPAN) % s.count);
-      const k = Game.U.wrapAngle(a1 - a0);
-      const t = i / s.count;
-      if (Math.abs(k) > THRESH && !this.inZone(this.gaps, t) && !this.inZone(this.fallZones, t)) {
-        const outSide = k > 0 ? 1 : -1; // 左コーナー(k>0)の外側=右(lateral正)
-        const mat = new THREE.MeshLambertMaterial({ map: this.chevronTexture(k > 0) });
-        for (let b = -1; b <= 1; b++) {
-          const idx = (i + b * 6 + s.count) % s.count;
-          const p = s.pts[idx], n = s.nrm[idx], w = s.w[idx];
-          const off = (w + this.offroadWidth + 1.4) * outSide;
-          const board = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.5, 0.14), mat);
-          board.position.set(p.x + n.x * off, p.y + 1.2, p.z + n.z * off);
-          board.rotation.y = s.tangentAngle(idx) + Math.PI; // 進行方向に正対させる
-          out.push(board);
-          const post = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 1.0, 6), postMat);
-          post.position.set(board.position.x, p.y + 0.5, board.position.z);
-          out.push(post);
-        }
-        placed++;
-        i += 40; // 同じコーナーへの重複配置を防ぐ
-        continue;
+    // カーブの「手前」から並べる(-16,-8,0サンプル ≒ 入口25ユニット手前から予告)
+    const LEAD_OFFSETS = [-16, -8, 0];
+    for (const c of this.detectCorners()) {
+      const t0 = c.idx / s.count;
+      if (this.inZone(this.gaps, t0) || this.inZone(this.fallZones, t0)) continue;
+      const outSide = c.k > 0 ? 1 : -1; // 左コーナー(k>0)の外側=右(lateral正)
+      const mat = new THREE.MeshLambertMaterial({ map: this.chevronTexture(c.k > 0) });
+      for (const b of LEAD_OFFSETS) {
+        const idx = (c.idx + b + s.count) % s.count;
+        const p = s.pts[idx], n = s.nrm[idx], w = s.w[idx];
+        const off = (w + this.offroadWidth + 1.4) * outSide;
+        const board = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.5, 0.14), mat);
+        board.position.set(p.x + n.x * off, p.y + 1.2, p.z + n.z * off);
+        board.rotation.y = s.tangentAngle(idx) + Math.PI; // 進行方向に正対させる
+        out.push(board);
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 1.0, 6), postMat);
+        post.position.set(board.position.x, p.y + 0.5, board.position.z);
+        out.push(post);
       }
-      i += 4;
     }
     return out;
   }
