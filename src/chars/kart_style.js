@@ -22,6 +22,92 @@
 
   // ==================== 共通ヘルパ ====================
 
+  // charIdからboostColorを引く。Game.characters未読込/未定義でも安全にフォールバック。
+  function getBoostColor(charId) {
+    const FALLBACK = 0xffa030;
+    try {
+      const list = window.Game && Game.characters && Game.characters.list;
+      if (!list) return FALLBACK;
+      const def = list.find((c) => c.id === charId);
+      return (def && def.boostColor != null) ? def.boostColor : FALLBACK;
+    } catch (e) {
+      return FALLBACK;
+    }
+  }
+
+  // サイドポッド/カウル面に貼る小型デカール(ゼッケン+架空スポンサーロゴ)のテクスチャ。
+  // 1枚のcanvasに2〜3種のロゴ+ゼッケン番号を並べ、PlaneGeometryで軽く浮かせて貼る。
+  function decalTexture(number, accentColor) {
+    const cv = document.createElement('canvas');
+    cv.width = 256; cv.height = 128;
+    const cx = cv.getContext('2d');
+    cx.clearRect(0, 0, cv.width, cv.height);
+    const accentHex = '#' + new THREE.Color(accentColor).getHexString();
+
+    // 左: 架空スポンサーロゴ1(STAR KART)
+    cx.fillStyle = accentHex;
+    cx.font = 'bold 22px sans-serif';
+    cx.textAlign = 'left'; cx.textBaseline = 'top';
+    cx.fillText('STAR KART', 6, 6);
+
+    // 右上: ゼッケン番号バッジ
+    cx.strokeStyle = accentHex;
+    cx.lineWidth = 4;
+    cx.beginPath(); cx.arc(210, 32, 26, 0, Math.PI * 2); cx.stroke();
+    cx.fillStyle = '#ffffff';
+    cx.font = 'bold 30px sans-serif';
+    cx.textAlign = 'center'; cx.textBaseline = 'middle';
+    cx.fillText(String(number ?? 1), 210, 34);
+
+    // 中段: 架空スポンサーロゴ2(TURBO WAFFLE)
+    cx.fillStyle = '#ffffff';
+    cx.font = 'bold 16px sans-serif';
+    cx.textAlign = 'left'; cx.textBaseline = 'top';
+    cx.fillText('TURBO WAFFLE', 6, 60);
+    cx.strokeStyle = '#ffffff';
+    cx.lineWidth = 2;
+    cx.strokeRect(4, 56, 150, 22);
+
+    // 下段: 架空スポンサーロゴ3(Soda Splash)
+    cx.fillStyle = accentHex;
+    cx.font = 'italic bold 18px sans-serif';
+    cx.fillText('Soda Splash', 6, 96);
+    cx.beginPath(); cx.arc(150, 104, 7, 0, Math.PI * 2); cx.fill();
+
+    const tex = new THREE.CanvasTexture(cv);
+    tex.anisotropy = 2;
+    return tex;
+  }
+
+  // 車体側面にステッカー(デカール)平面を僅かに浮かせて追加。
+  function addSideDecals(tilt, number, accentColor, xOffset, y, z, w = 0.9, h = 0.45) {
+    const tex = decalTexture(number, accentColor);
+    const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false });
+    for (const side of [-1, 1]) {
+      const plane = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
+      plane.position.set(side * xOffset, y, z);
+      plane.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2;
+      plane.renderOrder = 2;
+      tilt.add(plane);
+    }
+  }
+
+  // 車体エッジに沿う細い発光ストリップ(boostColor)。tubeで曲面に沿わせる。
+  function addGlowStrip(tilt, points, boostColor, radius = 0.025) {
+    const strip = new THREE.Mesh(Game.geo.tube(points, radius, Math.max(4, points.length * 4), 6),
+      Game.mats.glow(boostColor, 1.3));
+    tilt.add(strip);
+    return strip;
+  }
+
+  // ヘッドライトの発光コアにガラスレンズ(glass)を重ねる。
+  function addHeadlightLens(tilt, x, y, z, r = 0.14) {
+    const lens = new THREE.Mesh(new THREE.SphereGeometry(r, 10, 8), Game.mats.glass(0xffffff, 0.45));
+    lens.position.set(x, y, z);
+    tilt.add(lens);
+    return lens;
+  }
+
   function numberTexture(number, accentColor, faceColor) {
     const cv = document.createElement('canvas');
     cv.width = KS.numberCanvasSize; cv.height = KS.numberCanvasSize;
@@ -113,14 +199,15 @@
     return wheels;
   }
 
-  function buildFlamesAt(tilt, positions, kart) {
+  function buildFlamesAt(tilt, positions, kart, boostColor) {
+    const flameColor = boostColor != null ? boostColor : 0xffa030;
     kart._flames = [];
     for (const [x, y, z, rotX] of positions) {
-      const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.13, 0.5, 10), Game.mats.glow(0xffb060, 0.5));
+      const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.13, 0.5, 10), Game.mats.glow(flameColor, 0.5));
       pipe.position.set(x, y, z);
       pipe.rotation.x = rotX ?? Math.PI / 2.4;
       tilt.add(pipe);
-      const flame = new THREE.Mesh(new THREE.ConeGeometry(0.15, 0.85, 8), Game.mats.glow(0xffa030, 1.6));
+      const flame = new THREE.Mesh(new THREE.ConeGeometry(0.15, 0.85, 8), Game.mats.glow(flameColor, 1.6));
       flame.material.transparent = true;
       flame.material.opacity = 0.9;
       flame.position.set(x, y - 0.02, z - 0.43);
@@ -157,7 +244,7 @@
   // 50メッシュ以内、riderPlaceholder位置固定、_wheels×4/_flames/_sparks/_shadow を用意すること。
 
   // ---- kurumu: 王道の赤いヒーローレーサー(クリーム色ストライプ) ----
-  function buildKurumu(kart, baseColor, accentColor, number) {
+  function buildKurumu(kart, baseColor, accentColor, number, boostColor) {
     const g = new THREE.Group(); const tilt = new THREE.Group(); g.add(tilt);
     const paintMat = Game.mats.paint(baseColor.getHex());
     const creamMat = Game.mats.matte(0xfff3dc);
@@ -166,7 +253,7 @@
     const rubberMat = Game.mats.rubber();
     const glassMat = Game.mats.glass(0xdff3ff, 0.35);
 
-    const body = new THREE.Mesh(new THREE.BoxGeometry(KS.bodyWid, KS.bodyHt, KS.bodyLen), paintMat);
+    const body = new THREE.Mesh(Game.geo.roundedBox(KS.bodyWid, KS.bodyHt, KS.bodyLen, 0.09), paintMat);
     body.position.y = KS.bodyY; tilt.add(body);
 
     const nose = new THREE.Mesh(new THREE.ConeGeometry(0.58, 1.25, 4), paintMat);
@@ -175,10 +262,11 @@
     tilt.add(nose);
 
     for (const sx of [-0.82, 0.82]) {
-      const pod = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.3, 1.3), paintMat);
+      const pod = new THREE.Mesh(Game.geo.roundedBox(0.34, 0.3, 1.3, 0.08), paintMat);
       pod.position.set(sx, 0.48, -0.15);
       tilt.add(pod);
     }
+    addSideDecals(tilt, number, accentColor, 0.995, 0.48, -0.15, 0.85, 0.26);
     // クリームストライプ(センター+サイド)
     const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.03, 2.6), creamMat);
     stripe.position.set(0, 0.685, -0.05); tilt.add(stripe);
@@ -193,6 +281,14 @@
 
     const light = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.08, 0.08), Game.mats.glow(0xfff2b0, 0.9));
     light.position.set(0, 0.5, 1.9); tilt.add(light);
+    addHeadlightLens(tilt, -0.22, 0.5, 1.91, 0.09);
+    addHeadlightLens(tilt, 0.22, 0.5, 1.91, 0.09);
+
+    // 発光エッジライン(boostColor、車体側面の縁に沿う)
+    addGlowStrip(tilt, [
+      [-KS.bodyWid / 2 - 0.01, 0.68, 1.35], [-KS.bodyWid / 2 - 0.01, 0.68, -1.05],
+      [0, 0.68, -1.2], [KS.bodyWid / 2 + 0.01, 0.68, -1.05], [KS.bodyWid / 2 + 0.01, 0.68, 1.35],
+    ], boostColor);
 
     const seatBack = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.55, 0.16), Game.mats.matte(0x2c2c33));
     seatBack.position.set(0, 0.9, -0.85); tilt.add(seatBack);
@@ -214,14 +310,14 @@
 
     const engineBlock = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.4, 0.5), metalMat);
     engineBlock.position.set(0, KS.engineY, KS.engineZ + 0.1); tilt.add(engineBlock);
-    buildFlamesAt(tilt, [[-0.28, KS.engineY - 0.04, -1.42], [0.28, KS.engineY - 0.04, -1.42]], kart);
+    buildFlamesAt(tilt, [[-0.28, KS.engineY - 0.04, -1.42], [0.28, KS.engineY - 0.04, -1.42]], kart, boostColor);
 
     kart._wheels = makeRoundWheels(tilt, rimMat, rubberMat);
     return { g, tilt };
   }
 
   // ---- rupo: 配達バイク風(後部に小包の荷台、細身で軽快) ----
-  function buildRupo(kart, baseColor, accentColor, number) {
+  function buildRupo(kart, baseColor, accentColor, number, boostColor) {
     const g = new THREE.Group(); const tilt = new THREE.Group(); g.add(tilt);
     const paintMat = Game.mats.paint(baseColor.getHex());
     const whiteMat = Game.mats.matte(0xfaf6ee);
@@ -230,19 +326,20 @@
     const rubberMat = Game.mats.rubber();
 
     // 細身シャシー(全幅は共通契約内だが視覚的に絞る)
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.3, 2.1), paintMat);
+    const body = new THREE.Mesh(Game.geo.roundedBox(0.95, 0.3, 2.1, 0.09), paintMat);
     body.position.y = 0.48; tilt.add(body);
     const nose = new THREE.Mesh(new THREE.ConeGeometry(0.42, 1.0, 6), paintMat);
     nose.rotation.x = Math.PI / 2; nose.position.set(0, 0.5, 1.35);
     tilt.add(nose);
 
     // 荷台(後部の小包ボックス)
-    const cargo = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.55, 0.7), whiteMat);
+    const cargo = new THREE.Mesh(Game.geo.roundedBox(0.9, 0.55, 0.7, 0.07), whiteMat);
     cargo.position.set(0, 0.78, -1.15); tilt.add(cargo);
     const cargoStrap = new THREE.Mesh(new THREE.BoxGeometry(0.94, 0.06, 0.74), accentMat_(accentColor));
     cargoStrap.position.set(0, 0.78, -1.15); tilt.add(cargoStrap);
     const parcel = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.3, 0.4), Game.mats.matte(0xd9a066));
     parcel.position.set(0, 1.18, -1.15); tilt.add(parcel);
+    addSideDecals(tilt, number, accentColor, 0.476, 0.48, 0.2, 0.6, 0.22);
 
     // フェンダー(前後、軽快なバイク感)
     const fenderF = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.22, 12, 1, false, 0, Math.PI), paintMat);
@@ -253,6 +350,12 @@
 
     const light = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 8), Game.mats.glow(0xfff2b0, 0.9));
     light.position.set(0, 0.55, 1.75); tilt.add(light);
+    addHeadlightLens(tilt, 0, 0.55, 1.76, 0.08);
+
+    // 発光エッジライン(boostColor)
+    addGlowStrip(tilt, [
+      [-0.48, 0.64, 1.05], [-0.48, 0.64, -1.0], [0.48, 0.64, -1.0], [0.48, 0.64, 1.05],
+    ], boostColor, 0.02);
 
     const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.03, 1.8), whiteMat);
     stripe.position.set(0, 0.64, 0.1); tilt.add(stripe);
@@ -273,7 +376,7 @@
     const engineBlock = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.4, 10), metalMat);
     engineBlock.rotation.z = Math.PI / 2;
     engineBlock.position.set(0, 0.5, -0.05); tilt.add(engineBlock);
-    buildFlamesAt(tilt, [[0, 0.5, -1.55]], kart);
+    buildFlamesAt(tilt, [[0, 0.5, -1.55]], kart, boostColor);
     // 荷台があるため単一排気(配列長1でもkart._flamesは配列なのでOK)
 
     // 細身の前後2輪+補助輪相当2輪(契約の4輪を維持しつつ軽快な単車感を出すため小径統一)
@@ -293,17 +396,17 @@
   function accentMat_(accentColor) { return Game.mats.paint(accentColor.getHex ? accentColor.getHex() : accentColor); }
 
   // ---- donga: 岩塊装甲の重戦車カート(極太タイヤ、前面ラム板、ひび発光) ----
-  function buildDonga(kart, baseColor, accentColor, number) {
+  function buildDonga(kart, baseColor, accentColor, number, boostColor) {
     const g = new THREE.Group(); const tilt = new THREE.Group(); g.add(tilt);
     const rockMat = Game.mats.matte(baseColor.getHex());
     const rockDarkMat = Game.mats.matte(accentColor.getHex());
     const metalMat = Game.mats.metal(0x8a8f98);
     const rubberMat = Game.mats.rubber(0x1b1b1f);
     const rimMat = Game.mats.metal(0x6b6f78);
-    const lavaMat = Game.mats.glow(0xff6a2e, 1.6);
+    const lavaMat = Game.mats.glow(boostColor, 1.6);
 
     // 太く低い岩装甲ボディ
-    const body = new THREE.Mesh(new THREE.BoxGeometry(1.75, 0.5, 2.1), rockMat);
+    const body = new THREE.Mesh(Game.geo.roundedBox(1.75, 0.5, 2.1, 0.1), rockMat);
     body.position.y = 0.5; tilt.add(body);
     // 岩の凹凸(側面ブロック2個)
     for (const sx of [-0.95, 0.95]) {
@@ -311,12 +414,15 @@
       chunk.position.set(sx, 0.62, 0.1); tilt.add(chunk);
     }
     // 前面ラム板(押し合い用の分厚い装甲)
-    const ram = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.7, 0.35), metalMat);
+    const ram = new THREE.Mesh(Game.geo.roundedBox(1.6, 0.7, 0.35, 0.07), metalMat);
     ram.position.set(0, 0.5, 1.55); tilt.add(ram);
     const ramRivet = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.06, 0.06), lavaMat);
     ramRivet.position.set(0, 0.5, 1.73); tilt.add(ramRivet);
+    addHeadlightLens(tilt, -0.55, 0.5, 1.74, 0.1);
+    addHeadlightLens(tilt, 0.55, 0.5, 1.74, 0.1);
+    addSideDecals(tilt, number, accentColor, 0.876, 0.5, -0.05, 0.8, 0.32);
 
-    // ひび割れ発光ライン(センター+側面)
+    // ひび割れ発光ライン(センター+側面、boostColor=溶岩色)
     const crack = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.06, 2.0), lavaMat);
     crack.position.set(0, 0.76, -0.1); tilt.add(crack);
     const crackSide = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.35, 0.08), lavaMat);
@@ -339,7 +445,7 @@
 
     const engineBlock = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.4, 0.4), metalMat);
     engineBlock.position.set(0, KS.engineY, KS.engineZ); tilt.add(engineBlock);
-    buildFlamesAt(tilt, [[-0.35, KS.engineY - 0.04, -1.42], [0.35, KS.engineY - 0.04, -1.42]], kart);
+    buildFlamesAt(tilt, [[-0.35, KS.engineY - 0.04, -1.42], [0.35, KS.engineY - 0.04, -1.42]], kart, boostColor);
 
     // 極太タイヤ(前後とも大径・幅広)
     kart._wheels = makeCustomWheels(tilt,
@@ -357,7 +463,7 @@
   }
 
   // ---- volt8: ホバー風一体型マシン(車輪の代わりに発光ホイールコア+スラスター) ----
-  function buildVolt8(kart, baseColor, accentColor, number) {
+  function buildVolt8(kart, baseColor, accentColor, number, boostColor) {
     const g = new THREE.Group(); const tilt = new THREE.Group(); g.add(tilt);
     const metalMat = Game.mats.metal(0xc7cdd6);
     const darkMetalMat = Game.mats.metal(0x565a63);
@@ -365,7 +471,7 @@
     const cyanGlowSoft = Game.mats.glow(0x5be8ff, 0.7);
 
     // 一体型シャシー(下半身融合なので車体自体が滑らかな流線)
-    const body = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.32, 2.2), metalMat);
+    const body = new THREE.Mesh(Game.geo.roundedBox(1.3, 0.32, 2.2, 0.08), metalMat);
     body.position.y = 0.5; tilt.add(body);
     const noseCanopy = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1.1, 8), metalMat);
     noseCanopy.rotation.x = Math.PI / 2; noseCanopy.position.set(0, 0.55, 1.35);
@@ -376,11 +482,18 @@
       pod.rotation.x = Math.PI / 2; pod.position.set(sx, 0.42, -0.1);
       tilt.add(pod);
     }
+    addSideDecals(tilt, number, accentColor, 0.35, 0.5, -0.1, 0.6, 0.24);
 
     tilt.add(makeRoundel(number, 0x5be8ff, '#eef6ff'));
 
     const light = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.06, 0.06), cyanGlow);
     light.position.set(0, 0.52, 1.85); tilt.add(light);
+    addHeadlightLens(tilt, -0.24, 0.52, 1.86, 0.08);
+    addHeadlightLens(tilt, 0.24, 0.52, 1.86, 0.08);
+    // 発光エッジライン(boostColor)
+    addGlowStrip(tilt, [
+      [-0.66, 0.66, 1.0], [-0.66, 0.66, -1.05], [0.66, 0.66, -1.05], [0.66, 0.66, 1.0],
+    ], boostColor, 0.022);
     const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.5, 6), darkMetalMat);
     antenna.position.set(0.15, 1.35, -0.6); tilt.add(antenna);
     const antennaTip = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), cyanGlow);
@@ -405,7 +518,7 @@
     const thruster = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.6, 0.12, 16), cyanGlowSoft);
     thruster.position.set(0, 0.12, -0.1); tilt.add(thruster);
 
-    buildFlamesAt(tilt, [[-0.3, 0.5, -1.42], [0.3, 0.5, -1.42]], kart);
+    buildFlamesAt(tilt, [[-0.3, 0.5, -1.42], [0.3, 0.5, -1.42]], kart, boostColor);
 
     // 「車輪」= 発光コア球+リングを4隅に配置(spinnerが回ると光が回る)
     kart._wheels = makeCustomWheels(tilt,
@@ -424,7 +537,7 @@
   }
 
   // ---- shizuku: 魔法のソリ型(クリスタル製、車輪=光のリング) ----
-  function buildShizuku(kart, baseColor, accentColor, number) {
+  function buildShizuku(kart, baseColor, accentColor, number, boostColor) {
     const g = new THREE.Group(); const tilt = new THREE.Group(); g.add(tilt);
     const glassMat = Game.mats.glass(baseColor.getHex(), 0.5);
     const glassAccentMat = Game.mats.glass(0xffffff, 0.65);
@@ -432,7 +545,7 @@
     const iridescentGlow = Game.mats.glow(0xb6f0ff, 1.2);
 
     // クリスタルボディ(半透明ガラス質)
-    const body = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.4, 2.15), glassMat);
+    const body = new THREE.Mesh(Game.geo.roundedBox(1.2, 0.4, 2.15, 0.14), glassMat);
     body.position.y = 0.52; tilt.add(body);
     const noseCrystal = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1.2, 6), glassMat);
     noseCrystal.rotation.x = Math.PI / 2; noseCrystal.position.set(0, 0.55, 1.4);
@@ -443,11 +556,17 @@
       shard.position.set(sx, 0.75, -0.2); shard.rotation.z = Math.sign(sx) * 0.4;
       tilt.add(shard);
     }
+    addSideDecals(tilt, number, accentColor, 0.605, 0.52, -0.2, 0.55, 0.24);
 
     tilt.add(makeRoundel(number, 0x6fd8ff, '#f2fbff'));
 
     const light = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 8), iridescentGlow);
     light.position.set(0, 0.58, 1.9); tilt.add(light);
+    addHeadlightLens(tilt, 0, 0.58, 1.9, 0.14);
+    // 発光エッジライン(boostColor)
+    addGlowStrip(tilt, [
+      [-0.61, 0.72, 1.0], [-0.61, 0.72, -0.95], [0.61, 0.72, -0.95], [0.61, 0.72, 1.0],
+    ], boostColor, 0.02);
 
     const seatBack = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.5, 0.14), glassAccentMat);
     seatBack.position.set(0, 0.9, -0.8); tilt.add(seatBack);
@@ -473,7 +592,7 @@
       tilt.add(railTip);
     }
 
-    buildFlamesAt(tilt, [[0, 0.4, -1.45]], kart);
+    buildFlamesAt(tilt, [[0, 0.4, -1.45]], kart, boostColor);
 
     // 車輪=光のリング(glowトーラス)。ソリ足の位置に合わせて4基配置
     kart._wheels = makeCustomWheels(tilt,
@@ -489,7 +608,7 @@
   }
 
   // ---- gumiras: ロイヤルカート(金装飾、玉座風シート、小さな旗) ----
-  function buildGumiras(kart, baseColor, accentColor, number) {
+  function buildGumiras(kart, baseColor, accentColor, number, boostColor) {
     const g = new THREE.Group(); const tilt = new THREE.Group(); g.add(tilt);
     const paintMat = Game.mats.paint(baseColor.getHex());
     const goldMat = Game.mats.metal(0xe8c14d);
@@ -497,9 +616,9 @@
     const rubberMat = Game.mats.rubber();
 
     // 恰幅よく重厚なボディ(幅広)
-    const body = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.42, 2.15), paintMat);
+    const body = new THREE.Mesh(Game.geo.roundedBox(1.6, 0.42, 2.15, 0.1), paintMat);
     body.position.y = 0.5; tilt.add(body);
-    const nose = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.32, 0.9), paintMat);
+    const nose = new THREE.Mesh(Game.geo.roundedBox(1.2, 0.32, 0.9, 0.08), paintMat);
     nose.position.set(0, 0.54, 1.4); tilt.add(nose);
     // 金の縁取り(車体外周ライン)
     const trim = new THREE.Mesh(new THREE.BoxGeometry(1.64, 0.06, 2.2), goldMat);
@@ -507,11 +626,18 @@
     const frontTrim = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.24, 8), goldMat);
     frontTrim.rotation.z = Math.PI / 2; frontTrim.position.set(0, 0.7, 1.4);
     tilt.add(frontTrim);
+    addSideDecals(tilt, number, accentColor, 0.805, 0.5, -0.05, 0.85, 0.3);
 
     tilt.add(makeRoundel(number, 0xe8c14d, '#f4e6c9'));
 
     const light = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.08, 0.08), Game.mats.glow(0xfff2b0, 0.9));
     light.position.set(0, 0.5, 1.87); tilt.add(light);
+    addHeadlightLens(tilt, -0.24, 0.5, 1.88, 0.08);
+    addHeadlightLens(tilt, 0.24, 0.5, 1.88, 0.08);
+    // 発光エッジライン(boostColor)
+    addGlowStrip(tilt, [
+      [-0.81, 0.71, 1.0], [-0.81, 0.71, -1.0], [0.81, 0.71, -1.0], [0.81, 0.71, 1.0],
+    ], boostColor, 0.02);
 
     // 玉座風シート(高い背もたれ+アームレスト)
     const throneBack = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.75, 0.18), velvetMat);
@@ -537,7 +663,7 @@
 
     const engineBlock = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.36, 0.4), goldMat);
     engineBlock.position.set(0, KS.engineY - 0.05, KS.engineZ); tilt.add(engineBlock);
-    buildFlamesAt(tilt, [[-0.3, KS.engineY - 0.08, -1.4], [0.3, KS.engineY - 0.08, -1.4]], kart);
+    buildFlamesAt(tilt, [[-0.3, KS.engineY - 0.08, -1.4], [0.3, KS.engineY - 0.08, -1.4]], kart, boostColor);
 
     kart._wheels = makeCustomWheels(tilt,
       [[-KS.wheelFrontX, KS.wheelFrontZ, true], [KS.wheelFrontX, KS.wheelFrontZ, true],
@@ -556,16 +682,16 @@
   }
 
   // ---- noir: 黒×赤のブレードマシン(鋭角ノーズ、赤い発光ライン) ----
-  function buildNoir(kart, baseColor, accentColor, number) {
+  function buildNoir(kart, baseColor, accentColor, number, boostColor) {
     const g = new THREE.Group(); const tilt = new THREE.Group(); g.add(tilt);
     const blackMat = Game.mats.matte(0x18181c);
     const metalMat = Game.mats.metal(0x2a2a30);
-    const redGlow = Game.mats.glow(0xff2138, 1.5);
+    const redGlow = Game.mats.glow(boostColor, 1.5);
     const rubberMat = Game.mats.rubber();
     const rimMat = Game.mats.metal(0x3a1418);
 
     // 低く鋭い車体
-    const body = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.28, 2.25), blackMat);
+    const body = new THREE.Mesh(Game.geo.roundedBox(1.3, 0.28, 2.25, 0.07), blackMat);
     body.position.y = 0.46; tilt.add(body);
     // 鋭角ノーズ(細長い刃状)
     const nose = new THREE.Mesh(new THREE.ConeGeometry(0.4, 1.5, 4), blackMat);
@@ -578,14 +704,17 @@
       blade.position.set(sx, 0.42, -0.1);
       tilt.add(blade);
     }
+    addSideDecals(tilt, number, accentColor, 0.6, 0.42, -0.1, 0.55, 0.24);
 
     tilt.add(makeRoundel(number, 0xff2138, '#1c1c20'));
 
-    // 赤い発光ライン(センター+ノーズ)
+    // 赤い発光ライン(センター+ノーズ、boostColor)
     const lineC = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.03, 2.2), redGlow);
     lineC.position.set(0, 0.62, -0.05); tilt.add(lineC);
     const eyeLight = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.05, 0.05), redGlow);
     eyeLight.position.set(0, 0.5, 1.95); tilt.add(eyeLight);
+    addHeadlightLens(tilt, -0.2, 0.5, 1.96, 0.07);
+    addHeadlightLens(tilt, 0.2, 0.5, 1.96, 0.07);
 
     const seatBack = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.5, 0.14), blackMat);
     seatBack.position.set(0, 0.86, -0.82); tilt.add(seatBack);
@@ -608,14 +737,14 @@
 
     const engineBlock = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.36, 0.45), metalMat);
     engineBlock.position.set(0, KS.engineY - 0.05, KS.engineZ); tilt.add(engineBlock);
-    buildFlamesAt(tilt, [[-0.28, KS.engineY - 0.08, -1.42], [0.28, KS.engineY - 0.08, -1.42]], kart);
+    buildFlamesAt(tilt, [[-0.28, KS.engineY - 0.08, -1.42], [0.28, KS.engineY - 0.08, -1.42]], kart, boostColor);
 
     kart._wheels = makeRoundWheels(tilt, rimMat, rubberMat);
     return { g, tilt };
   }
 
   // ---- baumjii: ウッド調クラシックカー(真鍮パーツ、丸型ヘッドライト) ----
-  function buildBaumjii(kart, baseColor, accentColor, number) {
+  function buildBaumjii(kart, baseColor, accentColor, number, boostColor) {
     const g = new THREE.Group(); const tilt = new THREE.Group(); g.add(tilt);
     const woodMat = Game.mats.matte(baseColor.getHex());
     const woodDarkMat = Game.mats.matte(accentColor.getHex());
@@ -624,7 +753,7 @@
     const glassMat = Game.mats.glass(0xfff6dd, 0.4);
 
     // クラシックな縦長・丸みのあるボディ
-    const body = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.4, 2.25), woodMat);
+    const body = new THREE.Mesh(Game.geo.roundedBox(1.3, 0.4, 2.25, 0.1), woodMat);
     body.position.y = 0.5; tilt.add(body);
     const hood = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.55, 1.1, 10, 1, false, 0, Math.PI), woodMat);
     hood.rotation.z = Math.PI / 2; hood.rotation.y = Math.PI / 2;
@@ -633,13 +762,15 @@
     const grain = new THREE.Mesh(new THREE.BoxGeometry(1.32, 0.05, 2.2), woodDarkMat);
     grain.position.set(0, 0.68, -0.05); tilt.add(grain);
 
-    // 丸型ヘッドライト2灯(真鍮フレーム)
+    // 丸型ヘッドライト2灯(真鍮フレーム+ガラスレンズ)
     for (const sx of [-0.35, 0.35]) {
       const rim = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.03, 8, 14), brassMat);
       rim.position.set(sx, 0.62, 1.75); tilt.add(rim);
       const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 8), Game.mats.glow(0xfff2b0, 0.9));
       lamp.position.set(sx, 0.62, 1.76); tilt.add(lamp);
+      addHeadlightLens(tilt, sx, 0.62, 1.78, 0.12);
     }
+    addSideDecals(tilt, number, accentColor, 0.655, 0.5, -0.05, 0.55, 0.24);
 
     tilt.add(makeRoundel(number, 0xc99a44, '#f6ecd6'));
 
@@ -647,6 +778,10 @@
     const frontBumper = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.3, 8), brassMat);
     frontBumper.rotation.z = Math.PI / 2; frontBumper.position.set(0, 0.34, 1.55);
     tilt.add(frontBumper);
+    // 発光エッジライン(boostColor)
+    addGlowStrip(tilt, [
+      [-0.66, 0.7, 0.95], [-0.66, 0.7, -1.0], [0.66, 0.7, -1.0], [0.66, 0.7, 0.95],
+    ], boostColor, 0.02);
 
     const seatBack = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.55, 0.18), woodDarkMat);
     seatBack.position.set(0, 0.92, -0.85); tilt.add(seatBack);
@@ -668,7 +803,7 @@
     const engineBlock = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.45, 10), brassMat);
     engineBlock.rotation.z = Math.PI / 2;
     engineBlock.position.set(0, KS.engineY - 0.08, KS.engineZ + 0.15); tilt.add(engineBlock);
-    buildFlamesAt(tilt, [[-0.3, KS.engineY - 0.1, -1.4], [0.3, KS.engineY - 0.1, -1.4]], kart);
+    buildFlamesAt(tilt, [[-0.3, KS.engineY - 0.1, -1.4], [0.3, KS.engineY - 0.1, -1.4]], kart, boostColor);
 
     kart._wheels = makeCustomWheels(tilt,
       [[-KS.wheelFrontX, KS.wheelFrontZ, true], [KS.wheelFrontX, KS.wheelFrontZ, true],
@@ -691,7 +826,7 @@
   }
 
   // ---- ginja: 忍者マシン(低く平たい、手裏剣風リム、ミントの排気) ----
-  function buildGinja(kart, baseColor, accentColor, number) {
+  function buildGinja(kart, baseColor, accentColor, number, boostColor) {
     const g = new THREE.Group(); const tilt = new THREE.Group(); g.add(tilt);
     const paintMat = Game.mats.paint(baseColor.getHex());
     const whiteMat = Game.mats.matte(0xf4f0e8);
@@ -701,20 +836,27 @@
     const rubberMat = Game.mats.rubber();
 
     // 低く平たい車体
-    const body = new THREE.Mesh(new THREE.BoxGeometry(1.35, 0.22, 2.3), paintMat);
+    const body = new THREE.Mesh(Game.geo.roundedBox(1.35, 0.22, 2.3, 0.06), paintMat);
     body.position.y = 0.34; tilt.add(body);
-    const nose = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.16, 0.9), paintMat);
+    const nose = new THREE.Mesh(Game.geo.roundedBox(0.9, 0.16, 0.9, 0.05), paintMat);
     nose.position.set(0, 0.34, 1.5); nose.rotation.x = 0.1; tilt.add(nose);
     // ミントの帯(側面ストライプ)
     const stripe = new THREE.Mesh(new THREE.BoxGeometry(1.37, 0.06, 2.35), mintMat);
     stripe.position.set(0, 0.42, -0.02); tilt.add(stripe);
     const whiteBand = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.04, 2.3), whiteMat);
     whiteBand.position.set(0, 0.46, -0.02); tilt.add(whiteBand);
+    addSideDecals(tilt, number, accentColor, 0.676, 0.34, -0.02, 0.55, 0.18);
 
     tilt.add(makeRoundel(number, 0x8fe8c8, '#2c231f'));
 
     const light = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.05, 0.05), mintGlow);
     light.position.set(0, 0.36, 1.94); tilt.add(light);
+    addHeadlightLens(tilt, -0.2, 0.36, 1.95, 0.06);
+    addHeadlightLens(tilt, 0.2, 0.36, 1.95, 0.06);
+    // 発光エッジライン(boostColor)
+    addGlowStrip(tilt, [
+      [-0.68, 0.46, 1.1], [-0.68, 0.46, -1.05], [0.68, 0.46, -1.05], [0.68, 0.46, 1.1],
+    ], boostColor, 0.018);
 
     // 低いシート(忍者の伏せ姿勢に合わせて背もたれも低め)
     const seatBack = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.34, 0.14), Game.mats.matte(0x22201e));
@@ -734,13 +876,13 @@
 
     const engineBlock = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.24, 0.4), metalMat);
     engineBlock.position.set(0, 0.36, -1.1); tilt.add(engineBlock);
-    // ミントの排気(発光色をミントに変更)
+    // ミントの排気(発光色はboostColor。既定はミント寄りのフォールバック)
     kart._flames = [];
     for (const x of [-0.3, 0.3]) {
-      const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 0.4, 10), Game.mats.glow(0x8fe8c8, 0.6));
+      const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 0.4, 10), Game.mats.glow(boostColor, 0.6));
       pipe.position.set(x, 0.3, -1.42); pipe.rotation.x = Math.PI / 2.4;
       tilt.add(pipe);
-      const flame = new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.7, 8), Game.mats.glow(0x8fe8c8, 1.6));
+      const flame = new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.7, 8), Game.mats.glow(boostColor, 1.6));
       flame.material.transparent = true; flame.material.opacity = 0.85;
       flame.position.set(x, 0.28, -1.8); flame.rotation.x = Math.PI / 2;
       flame.visible = false; tilt.add(flame);
@@ -764,7 +906,7 @@
   }
 
   // ---- フォールバック(現行classicベース。未知/undefined charId向け) ----
-  function buildClassic(kart, baseColor, accentColor, number) {
+  function buildClassic(kart, baseColor, accentColor, number, boostColor) {
     const g = new THREE.Group(); const tilt = new THREE.Group(); g.add(tilt);
     const paintMat = Game.mats.paint(baseColor.getHex());
     const accentPaintMat = Game.mats.paint(accentColor.getHex());
@@ -774,20 +916,21 @@
     const rubberMat = Game.mats.rubber();
     const glassMat = Game.mats.glass(0xdff3ff, 0.35);
 
-    const body = new THREE.Mesh(new THREE.BoxGeometry(KS.bodyWid, KS.bodyHt, KS.bodyLen), paintMat);
+    const body = new THREE.Mesh(Game.geo.roundedBox(KS.bodyWid, KS.bodyHt, KS.bodyLen, 0.09), paintMat);
     body.position.y = KS.bodyY; tilt.add(body);
 
     const frame = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, KS.bodyLen + 0.3, 6), metalMat);
     frame.rotation.x = Math.PI / 2; frame.position.set(0, KS.bodyY - KS.bodyHt / 2, 0);
     tilt.add(frame);
 
-    const nose = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.26, 1.05), paintMat);
+    const nose = new THREE.Mesh(Game.geo.roundedBox(0.95, 0.26, 1.05, 0.07), paintMat);
     nose.position.set(0, 0.52, 1.35); nose.rotation.x = 0.12; tilt.add(nose);
 
     for (const sx of [-0.82, 0.82]) {
-      const pod = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.3, 1.3), accentPaintMat);
+      const pod = new THREE.Mesh(Game.geo.roundedBox(0.34, 0.3, 1.3, 0.08), accentPaintMat);
       pod.position.set(sx, 0.48, -0.15); tilt.add(pod);
     }
+    addSideDecals(tilt, number, accentColor, 0.995, 0.48, -0.15, 0.85, 0.26);
     const splitter = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.045, 0.5), metalMat);
     splitter.position.set(0, 0.2, 1.7); tilt.add(splitter);
     const fWing = new THREE.Mesh(new THREE.BoxGeometry(1.99, 0.09, 0.44), metalMat);
@@ -797,8 +940,15 @@
 
     const light = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.08, 0.08), Game.mats.glow(0xfff2b0, 0.9));
     light.position.set(0, 0.5, 1.85); tilt.add(light);
+    addHeadlightLens(tilt, -0.22, 0.5, 1.86, 0.09);
+    addHeadlightLens(tilt, 0.22, 0.5, 1.86, 0.09);
     const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.03, 2.2), Game.mats.matte(0xfff6ee));
     stripe.position.set(0, 0.685, -0.1); tilt.add(stripe);
+    // 発光エッジライン(boostColor)
+    addGlowStrip(tilt, [
+      [-KS.bodyWid / 2 - 0.01, 0.68, 1.35], [-KS.bodyWid / 2 - 0.01, 0.68, -1.05],
+      [0, 0.68, -1.2], [KS.bodyWid / 2 + 0.01, 0.68, -1.05], [KS.bodyWid / 2 + 0.01, 0.68, 1.35],
+    ], boostColor);
 
     const seatBack = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.55, 0.16), matteMat);
     seatBack.position.set(0, 0.9, -0.85); tilt.add(seatBack);
@@ -820,7 +970,7 @@
 
     const engineBlock = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.4, 0.5), metalMat);
     engineBlock.position.set(0, KS.engineY, KS.engineZ + 0.1); tilt.add(engineBlock);
-    buildFlamesAt(tilt, [[-0.28, KS.engineY - 0.04, -1.42], [0.28, KS.engineY - 0.04, -1.42]], kart);
+    buildFlamesAt(tilt, [[-0.28, KS.engineY - 0.04, -1.42], [0.28, KS.engineY - 0.04, -1.42]], kart, boostColor);
 
     kart._wheels = makeRoundWheels(tilt, rimMat, rubberMat);
     return { g, tilt };
@@ -843,9 +993,10 @@
     const number = kart.number ?? 1;
     const baseColor = new THREE.Color(color);
     const accentColor = baseColor.clone().multiplyScalar(0.55);
+    const boostColor = getBoostColor(kart.charId);
 
     const builder = BUILDERS[kart.charId] || buildClassic;
-    const { g, tilt } = builder(kart, baseColor, accentColor, number);
+    const { g, tilt } = builder(kart, baseColor, accentColor, number, boostColor);
 
     return finalize(kart, g, tilt);
   }

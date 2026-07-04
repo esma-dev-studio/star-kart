@@ -250,7 +250,7 @@
       switch (this._state) {
         case 'title': this._updateTitleBg(dt); this._navTitle(); break;
         case 'diffSelect': this._updateTitleBg(dt); this._navDiffSelect(); break;
-        case 'charSelect': this._updateTitleBg(dt); this._navCharSelect(); break;
+        case 'charSelect': this._updateCharShowcase(dt); this._navCharSelect(); break;
         case 'courseSelect': this._updateTitleBg(dt); this._navCourseSelect(); break;
         case 'race': this._updateRace(dt); break;
         case 'pause': this._updateRace(dt, true); break;
@@ -447,6 +447,9 @@
     _buildCharSelectLayer() {
       const layer = el('div', 'layer');
       const panel = el('div', 'sg-panel');
+      // 3Dショーケース(画面右)が見えるよう、カードUIは左に寄せる
+      panel.style.left = '28%';
+      panel.style.maxWidth = '540px';
       panel.appendChild(el('div', 'sg-heading', 'キャラクターをえらぼう'));
       const grid = el('div', 'sg-char-grid');
       panel.appendChild(grid);
@@ -468,9 +471,65 @@
     },
 
     _enterCharSelect() {
-      this._ensureBgScene();
+      this._bgCourse = null; // 3Dショーケースに切り替える(他画面へ戻ったら背景を再構築させる)
+      this._buildCharShowcase();
       if (this._charGridEl.children.length === 0) this._populateCharGrid();
       this._refreshCharGrid();
+    },
+
+    // ---- キャラ選択の3Dショーケース(選択中キャラを台座で回転表示) ----
+    _buildCharShowcase() {
+      const scene = Game.app.newScene();
+      scene.background = new THREE.Color(0x171225);
+      scene.fog = null;
+      const floor = new THREE.Mesh(new THREE.PlaneGeometry(50, 50), Game.mats.matte(0x241e33));
+      floor.rotation.x = -Math.PI / 2;
+      floor.receiveShadow = true;
+      scene.add(floor);
+      const podium = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.6, 1.9, 0.5, 32), Game.mats.metal(0x3a3450));
+      podium.position.set(0, 0.25, 0);
+      podium.receiveShadow = true;
+      scene.add(podium);
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(1.75, 0.05, 8, 40), Game.mats.glow(0xff8fb0, 1.6));
+      ring.rotation.x = Math.PI / 2;
+      ring.position.set(0, 0.52, 0);
+      scene.add(ring);
+      // ショーケース用ライティング(リム強め。newScene()がライトを作り直すため後始末不要)
+      if (Game.app.rim) { Game.app.rim.intensity = 1.25; Game.app.rim.color.setHex(0x8fd0ff); }
+      if (Game.app.hemi) Game.app.hemi.intensity = 0.35;
+      if (Game.app.sun) { Game.app.sun.intensity = 0.95; Game.app.updateSun(new THREE.Vector3(0, 0, 0)); }
+      const cam = Game.app.camera;
+      cam.position.set(-1.35, 1.75, 3.7); // キャラを画面右寄りに見せる(左はカードUI)
+      cam.lookAt(0, 1.05, 0);
+      this._showcase = { scene, charGroup: null, id: null, spin: 0 };
+    },
+
+    _setShowcaseChar(id) {
+      const sc = this._showcase;
+      if (!sc || sc.id === id) return;
+      if (sc.charGroup) sc.scene.remove(sc.charGroup);
+      const g = Game.characters.build(id);
+      g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+      g.scale.setScalar(1.55);
+      g.position.set(0, 0.5, 0);
+      if (Game.charRig && Game.charRig.setPose) Game.charRig.setPose(g, 'select');
+      sc.scene.add(g);
+      sc.charGroup = g;
+      sc.id = id;
+    },
+
+    _updateCharShowcase(dt) {
+      const sc = this._showcase;
+      if (!sc) return;
+      const cur = Game.characters.list[this._charCursor];
+      if (cur) this._setShowcaseChar(cur.id);
+      if (sc.charGroup) {
+        sc.spin += dt * 0.9;
+        sc.charGroup.rotation.y = sc.spin;
+        sc.charGroup.position.y = 0.5 + Math.sin(sc.spin * 1.7) * 0.05;
+      }
     },
 
     _populateCharGrid() {
