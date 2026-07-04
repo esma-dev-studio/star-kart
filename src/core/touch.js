@@ -16,11 +16,18 @@ Game.touch = {
     const style = document.createElement('style');
     style.textContent = `
 #touchRoot {
-  position: fixed; inset: 0; z-index: 40; pointer-events: none;
+  /* z-index はスクリーン層(#screens=40)より必ず上にする。
+     boot時は #touchRoot が #screens より先にDOMへ入るため、同値だと後勝ちで #screens が
+     上になり、レイヤーのpointer-events設定次第でボタンへのタッチが届かなくなる */
+  position: fixed; inset: 0; z-index: 50; pointer-events: none;
   display: none; font-family: 'Segoe UI', sans-serif;
   -webkit-user-select: none; user-select: none;
+  -webkit-touch-callout: none;
 }
 #touchRoot.visible { display: block; }
+/* ポーズ中は走行ボタンを消してポーズメニューと重ならないようにする(ポーズ解除ボタンだけ残す) */
+#touchRoot.paused .tc-btn { display: none; }
+#touchRoot.paused #tcPause { display: flex; }
 .tc-btn {
   position: absolute; pointer-events: auto; touch-action: none;
   border-radius: 50%; border: 3px solid rgba(255,255,255,0.85);
@@ -58,8 +65,10 @@ Game.touch = {
     const bindHold = (id, code) => {
       const el = root.querySelector('#' + id);
       const press = (e) => {
-        e.preventDefault();
-        try { el.setPointerCapture(e.pointerId); } catch (_) { /* no-op */ }
+        if (e.cancelable) e.preventDefault();
+        if (e.pointerId !== undefined) {
+          try { el.setPointerCapture(e.pointerId); } catch (_) { /* no-op */ }
+        }
         if (!Game.input.keys.has(code)) Game.input.just.add(code);
         Game.input.keys.add(code);
         el.classList.add('on');
@@ -68,9 +77,17 @@ Game.touch = {
         Game.input.keys.delete(code);
         el.classList.remove('on');
       };
+      // pointerイベントとtouchイベントを両方張る。
+      // PointerEvent非対応の古いiOS(iPadOS 12以前)でも動き、両対応環境では
+      // 両方発火するがキー操作はSetなので冪等(押下二重登録の害なし)。
+      // touchstartのpreventDefaultはSafariのスクロール/ズームのジェスチャ奪取
+      // (=直後のpointercancelでボタンが即離される現象)も防ぐ
       el.addEventListener('pointerdown', press);
       el.addEventListener('pointerup', release);
       el.addEventListener('pointercancel', release);
+      el.addEventListener('touchstart', press, { passive: false });
+      el.addEventListener('touchend', release);
+      el.addEventListener('touchcancel', release);
       el.addEventListener('contextmenu', (e) => e.preventDefault());
     };
 
@@ -90,5 +107,6 @@ Game.touch = {
   onState(state) {
     if (!this._enabled || !this._root) return;
     this._root.classList.toggle('visible', state === 'race' || state === 'pause');
+    this._root.classList.toggle('paused', state === 'pause');
   },
 };

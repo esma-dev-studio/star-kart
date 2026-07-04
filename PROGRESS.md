@@ -80,6 +80,19 @@
   こと、実 pointerdown 経路で speed 0→15 に加速、tcPause→ポーズ→「再開する」到達、8台完走回帰、
   エラーゼロ。**教訓: 全画面レイヤーを重ねる時は「入力を受けるべき要素」を先に列挙し、
   elementFromPoint によるヒットテストを回帰に含める**
+- 【第2ラウンド】ユーザー再テストで「まだ全滅」→ 調査の結果、**GitHub Pagesのビルドが未完了で
+  修正前の版を試していた**(公開中のJSに修正が無いことをcurlで確認)。さらに当初の検証には
+  「touch.init()を後から手動実行したためDOM挿入順が実機と逆(実機はboot時にtouchRootが先、
+  screensが後=タイ時はscreensが上)」という欠陥があった。対策として実施:
+  * touch.js堅牢化: #touchRootをz-index 50(screens=40より上、DOM順非依存)/pointer+touch
+    両イベント購読(旧iOS対応+Safariのジェスチャ奪取によるpointercancel対策)/
+    -webkit-touch-callout抑止/ポーズ中は走行ボタンを隠しtcPauseだけ残す(メニュー重なり防止)
+  * index.html: 全scriptに ?v= キャッシュバスター+画面左下に build 表示(#buildTag)。
+    **更新時は ?v= と buildTag を同じ値に揃えて上げる**(実機で版の確認ができる)
+  * 検証は insertBefore で実機のDOM順を再現し、全7ボタンのelementFromPoint+実イベント経路+
+    touchstart単独経路+ポーズ3ボタン+復帰+8台完走回帰+audit 9PASS/0FAILまで通した
+  * **教訓: push直後に完了報告しない。Pagesビルドのstatus=builtと公開URLの中身
+    (curlでコード断片を確認)まで見てから報告する**
 
 ## 残作業・今後の拡張候補
 

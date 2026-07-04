@@ -32,6 +32,13 @@
     text-shadow: 0 3px 0 #d46a9a, 0 6px 14px rgba(0,0,0,.25);
     pointer-events: none;
   }
+  /* 実機で「どの版が動いているか」を確認するためのビルド表示。
+     更新時は下のdivと全scriptの ?v= を同じ値に揃えて上げること */
+  #buildTag {
+    position: fixed; left: 8px; bottom: 4px; z-index: 55;
+    font: 10px/1.4 Consolas, monospace; color: rgba(255,255,255,0.55);
+    text-shadow: 0 1px 2px rgba(0,0,0,0.45); pointer-events: none;
+  }
 </style>
 </head>
 <body>
@@ -40,34 +47,35 @@
 <div id="hud"></div>
 <div id="centerMsg"></div>
 <div id="debug"></div>
+<div id="buildTag">build 260704b</div>
 
 <script src="lib/three.min.js"></script>
-<script src="src/core/boot.js"></script>
-<script src="src/core/config.js"></script>
-<script src="src/core/materials.js"></script>
-<script src="src/core/geo.js"></script>
-<script src="src/core/utils.js"></script>
-<script src="src/core/input.js"></script>
-<script src="src/core/touch.js"></script>
-<script src="src/core/audio.js"></script>
-<script src="src/courses/course.js"></script>
-<script src="src/courses/cookie_town.js"></script>
-<script src="src/courses/choco_canyon.js"></script>
-<script src="src/courses/sky_castle.js"></script>
-<script src="src/physics/kart.js"></script>
-<script src="src/chars/kart_style.js"></script>
-<script src="src/chars/character_materials.js"></script>
-<script src="src/chars/character_builder.js"></script>
-<script src="src/chars/character_rig.js"></script>
-<script src="src/chars/characters.js"></script>
-<script src="src/items/items.js"></script>
-<script src="src/fx/effects.js"></script>
-<script src="src/race/ai.js"></script>
-<script src="src/race/race.js"></script>
-<script src="src/ui/hud.js"></script>
-<script src="src/ui/screens.js"></script>
-<script src="src/core/game.js"></script>
-<script src="src/core/audit.js"></script>
-<script src="src/main.js"></script>
+<script src="src/core/boot.js?v=260704b"></script>
+<script src="src/core/config.js?v=260704b"></script>
+<script src="src/core/materials.js?v=260704b"></script>
+<script src="src/core/geo.js?v=260704b"></script>
+<script src="src/core/utils.js?v=260704b"></script>
+<script src="src/core/input.js?v=260704b"></script>
+<script src="src/core/touch.js?v=260704b"></script>
+<script src="src/core/audio.js?v=260704b"></script>
+<script src="src/courses/course.js?v=260704b"></script>
+<script src="src/courses/cookie_town.js?v=260704b"></script>
+<script src="src/courses/choco_canyon.js?v=260704b"></script>
+<script src="src/courses/sky_castle.js?v=260704b"></script>
+<script src="src/physics/kart.js?v=260704b"></script>
+<script src="src/chars/kart_style.js?v=260704b"></script>
+<script src="src/chars/character_materials.js?v=260704b"></script>
+<script src="src/chars/character_builder.js?v=260704b"></script>
+<script src="src/chars/character_rig.js?v=260704b"></script>
+<script src="src/chars/characters.js?v=260704b"></script>
+<script src="src/items/items.js?v=260704b"></script>
+<script src="src/fx/effects.js?v=260704b"></script>
+<script src="src/race/ai.js?v=260704b"></script>
+<script src="src/race/race.js?v=260704b"></script>
+<script src="src/ui/hud.js?v=260704b"></script>
+<script src="src/ui/screens.js?v=260704b"></script>
+<script src="src/core/game.js?v=260704b"></script>
+<script src="src/core/audit.js?v=260704b"></script>
+<script src="src/main.js?v=260704b"></script>
 </body>
 </html>
