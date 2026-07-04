@@ -100,7 +100,10 @@ Game.CameraCtrl = class CameraCtrl {
     this._orbitA = 0;     // 勝利オービット角
   }
 
-  addShake(m) { this._shake = Math.max(this._shake, m); }
+  addShake(m) {
+    this._shake = Math.max(this._shake, m);
+    this._punch = Math.max(this._punch || 0, m * 10); // 一瞬FOVが広がる衝撃表現
+  }
 
   snapTo(kart) {
     this.angle = kart.heading;
@@ -151,7 +154,8 @@ Game.CameraCtrl = class CameraCtrl {
     this.roll = U.damp(this.roll, rollTarget, 5, dt);
     if (Math.abs(this.roll) > 0.001) this.camera.rotateZ(this.roll);
 
-    const fov = C.fovBase + spd * C.fovSpeed + (kart.boostT > 0 ? C.fovBoost : 0);
+    if (this._punch > 0.01) this._punch *= Math.exp(-dt * 6);
+    const fov = C.fovBase + spd * C.fovSpeed + (kart.boostT > 0 ? C.fovBoost : 0) + (this._punch || 0);
     if (Math.abs(this.camera.fov - fov) > 0.05) {
       this.camera.fov = U.damp(this.camera.fov, fov, 6, dt);
       this.camera.updateProjectionMatrix();

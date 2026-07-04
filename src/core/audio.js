@@ -498,19 +498,32 @@
   // ==== エンジン音 ====
   function startEngine() {
     if (engine) return;
+    // 重厚化: メインsaw+デチューンsaw+サブオシレータ(1オクターブ下のsine)の3層
     const osc = ctx.createOscillator();
     osc.type = 'sawtooth';
     osc.frequency.value = C.engine.baseFreq;
+    const osc2 = ctx.createOscillator();
+    osc2.type = 'sawtooth';
+    osc2.frequency.value = C.engine.baseFreq;
+    osc2.detune.value = 14; // わずかにずらして厚みを出す
+    const sub = ctx.createOscillator();
+    sub.type = 'sine';
+    sub.frequency.value = C.engine.baseFreq / 2;
+    const subGain = ctx.createGain();
+    subGain.gain.value = 0.55;
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
     filter.frequency.value = C.engine.lowpassBase;
     const g = ctx.createGain();
     g.gain.value = 0.0001;
     osc.connect(filter);
+    osc2.connect(filter);
+    sub.connect(subGain);
+    subGain.connect(filter);
     filter.connect(g);
     g.connect(sfxBus);
-    osc.start();
-    engine = { osc, gain: g, filter };
+    osc.start(); osc2.start(); sub.start();
+    engine = { osc, osc2, sub, gain: g, filter };
   }
 
   function stopEngine() {
@@ -519,8 +532,31 @@
       const t = ctx.currentTime;
       engine.gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.08);
       engine.osc.stop(t + 0.1);
+      engine.osc2.stop(t + 0.1);
+      engine.sub.stop(t + 0.1);
     } catch (e) { /* noop */ }
     engine = null;
+  }
+
+  // ブースト時の「掛け声」風チャープ(キャラの体格でピッチが変わる)
+  function shout(pitch = 1) {
+    if (!ready || !ctx) return;
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    o.type = 'square';
+    o.frequency.setValueAtTime(280 * pitch, t);
+    o.frequency.exponentialRampToValueAtTime(520 * pitch, t + 0.09);
+    o.frequency.exponentialRampToValueAtTime(400 * pitch, t + 0.2);
+    const flt = ctx.createBiquadFilter();
+    flt.type = 'bandpass';
+    flt.frequency.value = 900 * pitch;
+    flt.Q.value = 1.2;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.09, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.24);
+    o.connect(flt); flt.connect(g); g.connect(sfxBus);
+    o.start(t); o.stop(t + 0.26);
   }
 
   const update = safe(function (dt, playerKart) {
@@ -530,6 +566,8 @@
     const freq = C.engine.baseFreq * (1 + ratio * (C.engine.maxFreqMul - 1));
     const now = ctx.currentTime;
     engine.osc.frequency.setTargetAtTime(freq, now, 0.05);
+    engine.osc2.frequency.setTargetAtTime(freq, now, 0.05);
+    engine.sub.frequency.setTargetAtTime(freq / 2, now, 0.05);
     engine.gain.gain.setTargetAtTime(C.engine.gain * (0.3 + ratio * 0.7), now, 0.08);
     engine.filter.frequency.setTargetAtTime(C.engine.lowpassBase + ratio * C.engine.lowpassSpeedMul, now, 0.06);
   });
@@ -562,6 +600,15 @@
     chain(kart, 'onFell', () => sfx('fall'));
     chain(kart, 'onRespawn', () => sfx('respawn'));
     chain(kart, 'onShieldBreak', () => sfx('shieldBreak'));
+
+    // キャラ別ピッチの掛け声(小柄=高い声、大柄=低い声)
+    const SHOUT_PITCH = {
+      donga: 0.55, gumiras: 0.7, baumjii: 0.75, noir: 0.85, volt8: 0.9,
+      kurumu: 1.15, rupo: 1.25, shizuku: 1.35, ginja: 1.45,
+    };
+    const pitch = SHOUT_PITCH[kart.charId] || 1.0;
+    chain(kart, 'onMiniTurbo', () => shout(pitch));
+    chain(kart, 'onJumpPad', () => shout(pitch * 1.1));
 
     attachedKarts.push(kart);
     if (isPlayer) startEngine();

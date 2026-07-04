@@ -446,6 +446,46 @@
     // =========================================================
     _buildCharSelectLayer() {
       const layer = el('div', 'layer');
+
+      // 選択カードの角ブラケット+ネームプレートのスタイル
+      const style = document.createElement('style');
+      style.textContent = `
+.sg-char-card { position: relative; }
+.sg-char-card.selected {
+  outline: 3px solid #ffc531; outline-offset: 2px;
+  box-shadow: 0 0 18px rgba(255,197,49,0.45);
+}
+.sg-char-card.selected::before, .sg-char-card.selected::after {
+  content: ''; position: absolute; width: 15px; height: 15px; pointer-events: none;
+}
+.sg-char-card.selected::before {
+  top: -7px; left: -7px;
+  border-top: 4px solid #ffc531; border-left: 4px solid #ffc531; border-radius: 4px 0 0 0;
+}
+.sg-char-card.selected::after {
+  bottom: -7px; right: -7px;
+  border-bottom: 4px solid #ffc531; border-right: 4px solid #ffc531; border-radius: 0 0 4px 0;
+}
+#sgNamePlate {
+  position: absolute; right: 5%; bottom: 8%; z-index: 5;
+  background: linear-gradient(100deg, rgba(24,18,30,0.92), rgba(48,38,58,0.92));
+  color: #fff; font-size: 34px; font-weight: 900; font-style: italic;
+  padding: 10px 44px; transform: skewX(-12deg);
+  border: 2px solid rgba(255,197,49,0.7); border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.45); letter-spacing: 2px;
+  pointer-events: none;
+}
+#sgNamePlate span { display: inline-block; transform: skewX(12deg); }
+`;
+      document.head.appendChild(style);
+
+      // ネームプレート(参考構成: 3Dモデルの下に選択中キャラ名)
+      const plate = el('div', null);
+      plate.id = 'sgNamePlate';
+      plate.innerHTML = '<span></span>';
+      layer.appendChild(plate);
+      this._namePlateEl = plate.querySelector('span');
+
       const panel = el('div', 'sg-panel');
       // 3Dショーケース(画面右)が見えるよう、カードUIは左に寄せる
       panel.style.left = '28%';
@@ -537,10 +577,14 @@
       this._charGridEl.innerHTML = '';
       list.forEach((c, i) => {
         const card = el('div', 'sg-char-card');
-        const cv = document.createElement('canvas');
-        cv.width = SC.portraitSize; cv.height = SC.portraitSize;
-        const ctx = cv.getContext('2d');
-        Game.characters.drawPortrait(ctx, c.id, SC.portraitSize);
+        let cv;
+        try {
+          cv = this._renderCharThumb(c.id, SC.portraitSize); // 3D実機レンダリング
+        } catch (e) {
+          cv = document.createElement('canvas');
+          cv.width = SC.portraitSize; cv.height = SC.portraitSize;
+          Game.characters.drawPortrait(cv.getContext('2d'), c.id, SC.portraitSize);
+        }
         card.appendChild(cv);
         card.appendChild(el('div', 'sg-char-name', c.name));
         card.appendChild(el('div', 'sg-char-motif', c.motif));
@@ -564,6 +608,48 @@
     _refreshCharGrid() {
       const cards = this._charGridEl.children;
       for (let i = 0; i < cards.length; i++) cards[i].classList.toggle('selected', i === this._charCursor);
+      const cur = Game.characters.list[this._charCursor];
+      if (this._namePlateEl && cur) this._namePlateEl.textContent = cur.name;
+    },
+
+    // カード用サムネイルを実際の3Dモデルからレンダリングする(2D似顔絵より一段上の完成感)
+    _renderCharThumb(id, size) {
+      const renderer = Game.app.renderer;
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x241e33);
+      scene.add(new THREE.HemisphereLight(0xffffff, 0x8a80a0, 0.85));
+      const key = new THREE.DirectionalLight(0xfff3dd, 1.0);
+      key.position.set(2, 3, 4);
+      scene.add(key);
+      const rim = new THREE.DirectionalLight(0x8fd0ff, 0.9);
+      rim.position.set(-2, 2, -3);
+      scene.add(rim);
+      const g = Game.characters.build(id);
+      if (Game.charRig && Game.charRig.setPose) Game.charRig.setPose(g, 'select');
+      g.rotation.y = 0.35;
+      scene.add(g);
+      // キャラの身長に合わせてフレーミング
+      const box = new THREE.Box3().setFromObject(g);
+      const h = Math.max(0.6, box.max.y - box.min.y);
+      const cy = (box.max.y + box.min.y) / 2;
+      const cam = new THREE.PerspectiveCamera(38, 1, 0.1, 30);
+      cam.position.set(0.2, cy + h * 0.12, h * 1.95);
+      cam.lookAt(0, cy, 0);
+      const prev = renderer.getSize(new THREE.Vector2());
+      renderer.setSize(size, size, false);
+      renderer.render(scene, cam);
+      const cv = document.createElement('canvas');
+      cv.width = size; cv.height = size;
+      cv.getContext('2d').drawImage(renderer.domElement, 0, 0, size, size);
+      renderer.setSize(prev.x, prev.y, false);
+      scene.traverse((o) => {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material) {
+          const ms = Array.isArray(o.material) ? o.material : [o.material];
+          ms.forEach((m) => { if (m.map) m.map.dispose(); m.dispose(); });
+        }
+      });
+      return cv;
     },
 
     _confirmCharSelect() {
