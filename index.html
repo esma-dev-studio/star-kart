@@ -7,7 +7,7 @@
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body {
-    width: 100%; height: 100%; overflow: hidden; background: #ffd9ec;
+    width: 100%; height: 100%; overflow: hidden; background: #0a0e22;
     overscroll-behavior: none;      /* iOSのバウンススクロール防止 */
     touch-action: manipulation;      /* ダブルタップズーム等の既定ジェスチャを抑止 */
     -webkit-user-select: none; user-select: none;
@@ -29,7 +29,7 @@
   #centerMsg {
     position: fixed; top: 30%; left: 50%; transform: translate(-50%, -50%);
     z-index: 30; color: #fff; font-size: 64px; font-weight: 900;
-    text-shadow: 0 3px 0 #d46a9a, 0 6px 14px rgba(0,0,0,.25);
+    text-shadow: 0 3px 0 #14205a, 0 0 22px rgba(90,170,255,0.55), 0 6px 14px rgba(0,0,0,.4);
     pointer-events: none;
   }
   /* 実機で「どの版が動いているか」を確認するためのビルド表示。
@@ -47,37 +47,39 @@
 <div id="hud"></div>
 <div id="centerMsg"></div>
 <div id="debug"></div>
-<div id="buildTag">build 260712a</div>
+<div id="buildTag">build 260712c</div>
 
 <script src="lib/three.min.js"></script>
-<script src="src/core/boot.js?v=260712a"></script>
-<script src="src/core/config.js?v=260712a"></script>
-<script src="src/core/materials.js?v=260712a"></script>
-<script src="src/core/geo.js?v=260712a"></script>
-<script src="src/core/utils.js?v=260712a"></script>
-<script src="src/core/input.js?v=260712a"></script>
-<script src="src/core/touch.js?v=260712a"></script>
-<script src="src/core/audio.js?v=260712a"></script>
-<script src="src/courses/course.js?v=260712a"></script>
-<script src="src/courses/cookie_town.js?v=260712a"></script>
-<script src="src/courses/choco_canyon.js?v=260712a"></script>
-<script src="src/courses/sky_castle.js?v=260712a"></script>
-<script src="src/courses/aurora_frost.js?v=260712a"></script>
-<script src="src/courses/solar_forge.js?v=260712a"></script>
-<script src="src/physics/kart.js?v=260712a"></script>
-<script src="src/chars/kart_style.js?v=260712a"></script>
-<script src="src/chars/character_materials.js?v=260712a"></script>
-<script src="src/chars/character_builder.js?v=260712a"></script>
-<script src="src/chars/character_rig.js?v=260712a"></script>
-<script src="src/chars/characters.js?v=260712a"></script>
-<script src="src/items/items.js?v=260712a"></script>
-<script src="src/fx/effects.js?v=260712a"></script>
-<script src="src/race/ai.js?v=260712a"></script>
-<script src="src/race/race.js?v=260712a"></script>
-<script src="src/ui/hud.js?v=260712a"></script>
-<script src="src/ui/screens.js?v=260712a"></script>
-<script src="src/core/game.js?v=260712a"></script>
-<script src="src/core/audit.js?v=260712a"></script>
-<script src="src/main.js?v=260712a"></script>
+<script src="src/core/boot.js?v=260712c"></script>
+<script src="src/core/config.js?v=260712c"></script>
+<script src="src/core/materials.js?v=260712c"></script>
+<script src="src/core/geo.js?v=260712c"></script>
+<script src="src/core/utils.js?v=260712c"></script>
+<script src="src/core/input.js?v=260712c"></script>
+<script src="src/core/touch.js?v=260712c"></script>
+<script src="src/core/audio.js?v=260712c"></script>
+<script src="src/courses/course.js?v=260712c"></script>
+<script src="src/courses/cookie_town.js?v=260712c"></script>
+<script src="src/courses/choco_canyon.js?v=260712c"></script>
+<script src="src/courses/sky_castle.js?v=260712c"></script>
+<script src="src/courses/aurora_frost.js?v=260712c"></script>
+<script src="src/courses/solar_forge.js?v=260712c"></script>
+<script src="src/courses/void_spiral.js?v=260712c"></script>
+<script src="src/courses/singularity.js?v=260712c"></script>
+<script src="src/physics/kart.js?v=260712c"></script>
+<script src="src/chars/kart_style.js?v=260712c"></script>
+<script src="src/chars/character_materials.js?v=260712c"></script>
+<script src="src/chars/character_builder.js?v=260712c"></script>
+<script src="src/chars/character_rig.js?v=260712c"></script>
+<script src="src/chars/characters.js?v=260712c"></script>
+<script src="src/items/items.js?v=260712c"></script>
+<script src="src/fx/effects.js?v=260712c"></script>
+<script src="src/race/ai.js?v=260712c"></script>
+<script src="src/race/race.js?v=260712c"></script>
+<script src="src/ui/hud.js?v=260712c"></script>
+<script src="src/ui/screens.js?v=260712c"></script>
+<script src="src/core/game.js?v=260712c"></script>
+<script src="src/core/audit.js?v=260712c"></script>
+<script src="src/main.js?v=260712c"></script>
 </body>
 </html>

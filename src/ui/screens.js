@@ -7,7 +7,9 @@
     rootId: 'screens',
     resultAutoDelaySec: 2,          // onRaceEnd から自動でリザルト画面を出すまでの秒数
     gpPointsByRank: [15, 12, 10, 8, 6, 4, 2, 1],
-    gpCourseOrder: ['cookieTown', 'auroraFrost', 'chocoCanyon', 'skyCastle', 'solarForge'],
+    // 全コース一覧(コース選択画面の表示順=難易度順)。GPはこの中から3つ選ぶ
+    courseList: ['cookieTown', 'auroraFrost', 'chocoCanyon', 'skyCastle', 'solarForge', 'voidSpiral', 'singularity'],
+    gpRaceCount: 3,
     bgCamRadius: 46,
     bgCamHeight: 22,
     bgCamSpeed: 0.05,               // rad/s
@@ -15,7 +17,8 @@
     portraitSize: 108,
     statBarMax: 5,
     taStorageKeyPrefix: 'sugariaGP_ta_',
-    courseDifficulty: { cookieTown: 1, auroraFrost: 2, chocoCanyon: 2, skyCastle: 3, solarForge: 3 },
+    courseDifficulty: { cookieTown: 1, auroraFrost: 2, chocoCanyon: 2, skyCastle: 3, solarForge: 3, voidSpiral: 4, singularity: 5 },
+    courseStarMax: 5,
     awardCamRadius: 16,
     awardCamHeight: 7,
     awardCamSpeed: 0.22,
@@ -36,36 +39,40 @@
 
   .sg-btn {
     display: inline-block; cursor: pointer; user-select: none;
-    background: linear-gradient(180deg, #fff7fb 0%, #ffd3e6 60%, #ffb8d6 100%);
-    border: 4px solid #fff; border-radius: 999px;
-    color: #d43d7c; font-weight: 900; font-size: 22px;
+    background: linear-gradient(180deg, #35427a 0%, #222c58 55%, #171f42 100%);
+    border: 4px solid rgba(150,200,255,0.55); border-radius: 999px;
+    color: #eaf4ff; font-weight: 900; font-size: 22px;
     padding: 14px 40px; margin: 8px;
-    box-shadow: 0 6px 0 #e888b3, 0 10px 18px rgba(180,60,110,0.35);
+    box-shadow: 0 6px 0 #0c1230, 0 10px 18px rgba(0,10,40,0.55), inset 0 1px 0 rgba(255,255,255,0.22);
     transition: transform 0.12s ease, box-shadow 0.12s ease;
     text-align: center;
+    text-shadow: 0 1px 3px rgba(0,10,40,0.6);
   }
-  .sg-btn:hover { transform: translateY(-2px); }
+  .sg-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 0 #0c1230, 0 12px 24px rgba(40,120,255,0.35), inset 0 1px 0 rgba(255,255,255,0.22); }
   .sg-btn.selected {
-    background: linear-gradient(180deg, #fffdf2 0%, #ffe38a 60%, #ffcf4d 100%);
-    color: #a8620a; box-shadow: 0 6px 0 #e8a93b, 0 10px 22px rgba(220,150,20,0.45);
+    background: linear-gradient(180deg, #fff3c4 0%, #ffd94a 55%, #ff9a3c 100%);
+    color: #4a2c00; text-shadow: none;
+    box-shadow: 0 6px 0 #8a5a10, 0 10px 26px rgba(255,190,60,0.5), inset 0 1px 0 rgba(255,255,255,0.6);
     transform: translateY(-3px) scale(1.04);
+    border-color: rgba(255,240,200,0.9);
   }
   .sg-btn.small { font-size: 16px; padding: 10px 26px; }
   .sg-btn.ghost {
-    background: rgba(255,255,255,0.75); color: #7a5570;
-    box-shadow: 0 4px 0 #d8c2d2, 0 6px 12px rgba(120,80,110,0.25);
+    background: rgba(16,22,48,0.72); color: #9fb4e8;
+    border-color: rgba(140,165,230,0.35);
+    box-shadow: 0 4px 0 #0a0f28, 0 6px 12px rgba(0,10,40,0.4);
   }
 
   .sg-title-logo {
     text-align: center; margin-top: 6vh;
     font-size: 88px; font-weight: 900; letter-spacing: 2px;
-    background: linear-gradient(180deg, #fff6c2 0%, #ffb6d9 45%, #ff7fb8 75%, #d94f96 100%);
+    background: linear-gradient(180deg, #fff9d0 0%, #ffe27a 34%, #7ef0d8 68%, #3a9bff 100%);
     -webkit-background-clip: text; background-clip: text; color: transparent;
-    filter: drop-shadow(0 6px 0 #b8467f) drop-shadow(0 14px 22px rgba(90,20,60,0.45));
+    filter: drop-shadow(0 5px 0 #14205a) drop-shadow(0 0 26px rgba(80,170,255,0.55)) drop-shadow(0 14px 22px rgba(0,10,40,0.6));
   }
   .sg-title-sub {
     text-align: center; margin-top: 4px; font-size: 22px; font-weight: 700;
-    color: #fff; text-shadow: 0 2px 0 #d15b95, 0 4px 10px rgba(0,0,0,0.3);
+    color: #cfe2ff; text-shadow: 0 2px 0 #14205a, 0 0 14px rgba(90,160,255,0.5);
     letter-spacing: 6px;
   }
   .sg-sparkle {
@@ -79,59 +86,72 @@
 
   .sg-panel {
     position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
-    background: rgba(255,250,246,0.92); border-radius: 34px;
-    border: 6px solid #fff; box-shadow: 0 14px 40px rgba(120,50,90,0.35);
+    background: rgba(10,15,36,0.9); border-radius: 34px;
+    border: 6px solid rgba(90,130,230,0.32);
+    box-shadow: 0 14px 44px rgba(0,0,0,0.65), inset 0 1px 0 rgba(150,190,255,0.18), 0 0 0 1px rgba(126,240,216,0.12);
     padding: 30px 34px; max-width: 94vw; max-height: 92vh; overflow: auto;
   }
   .sg-heading {
-    text-align: center; font-size: 30px; font-weight: 900; color: #d43d7c; margin-bottom: 18px;
-    text-shadow: 0 2px 0 #fff;
+    text-align: center; font-size: 30px; font-weight: 900; color: #ffe27a; margin-bottom: 18px;
+    text-shadow: 0 2px 0 #14205a, 0 0 16px rgba(255,210,90,0.35);
   }
 
   .sg-char-grid { display: grid; grid-template-columns: repeat(3, 176px); gap: 16px; }
   .sg-char-card {
-    background: linear-gradient(180deg,#fff,#fff0f6); border-radius: 20px; border: 4px solid #ffd6e8;
+    background: linear-gradient(180deg, rgba(34,44,88,0.95), rgba(16,22,48,0.95));
+    border-radius: 20px; border: 4px solid #2c3a6e;
     padding: 10px; text-align: center; cursor: pointer; transition: transform 0.12s, border-color 0.12s;
   }
   .sg-char-card:hover { transform: translateY(-3px); }
-  .sg-char-card.selected { border-color: #ffb347; box-shadow: 0 0 0 4px rgba(255,179,71,0.35); transform: translateY(-4px) scale(1.03); }
-  .sg-char-card canvas { border-radius: 14px; background: #fff8ec; }
-  .sg-char-name { font-weight: 900; color: #b8467f; font-size: 15px; margin: 6px 0 4px; }
-  .sg-char-motif { font-size: 11px; color: #a98; margin-bottom: 6px; }
-  .sg-stat-row { display: flex; align-items: center; gap: 4px; font-size: 10px; color: #99667c; margin: 2px 10px; }
+  .sg-char-card.selected { border-color: #ffd94a; box-shadow: 0 0 0 4px rgba(255,217,74,0.3), 0 0 22px rgba(255,190,60,0.35); transform: translateY(-4px) scale(1.03); }
+  .sg-char-card canvas { border-radius: 14px; background: #0e1430; }
+  .sg-char-name { font-weight: 900; color: #eaf4ff; font-size: 15px; margin: 6px 0 4px; }
+  .sg-char-motif { font-size: 11px; color: #8fa0cc; margin-bottom: 6px; }
+  .sg-stat-row { display: flex; align-items: center; gap: 4px; font-size: 10px; color: #9fb4e8; margin: 2px 10px; }
   .sg-stat-label { width: 18px; text-align: right; font-weight: 700; }
-  .sg-stat-bar { flex: 1; height: 7px; background: #f3dbe6; border-radius: 5px; overflow: hidden; }
-  .sg-stat-fill { height: 100%; border-radius: 5px; background: linear-gradient(90deg,#ffb6d9,#ff6fa8); }
+  .sg-stat-bar { flex: 1; height: 7px; background: #141c40; border-radius: 5px; overflow: hidden; }
+  .sg-stat-fill { height: 100%; border-radius: 5px; background: linear-gradient(90deg,#7ef0d8,#3a9bff); }
 
-  .sg-course-grid { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; max-width: 1240px; }
+  .sg-course-grid { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; max-width: 1240px; }
   .sg-course-card {
-    width: 220px; background: linear-gradient(180deg,#fff,#f2f8ff); border-radius: 22px;
-    border: 4px solid #cfe8ff; padding: 16px; text-align: center; cursor: pointer;
+    width: 200px; background: linear-gradient(180deg, rgba(34,44,88,0.95), rgba(16,22,48,0.95));
+    border-radius: 22px;
+    border: 4px solid #2c3a6e; padding: 14px; text-align: center; cursor: pointer;
     transition: transform 0.12s, border-color 0.12s;
+    position: relative;
   }
+  .sg-course-pick {
+    position: absolute; top: -12px; right: -12px; width: 36px; height: 36px;
+    border-radius: 50%; background: linear-gradient(180deg,#ffe38a,#ffcf4d);
+    border: 3px solid #fff8e0; color: #6a4200; font-weight: 900; font-size: 19px;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 3px 10px rgba(255,190,60,0.55); z-index: 2;
+  }
+  .sg-course-hint { text-align: center; color: #9fb4e8; font-size: 14px; font-weight: 700; margin: -6px 0 12px; min-height: 18px; }
   .sg-course-card:hover { transform: translateY(-3px); }
-  .sg-course-card.selected { border-color: #ffb347; box-shadow: 0 0 0 4px rgba(255,179,71,0.35); transform: translateY(-4px) scale(1.03); }
-  .sg-course-thumb { width: 100%; height: 96px; border-radius: 14px; margin-bottom: 10px; }
-  .sg-course-name { font-weight: 900; color: #4a6fa8; font-size: 16px; margin-bottom: 4px; }
-  .sg-course-stars { color: #ffb347; font-size: 18px; letter-spacing: 2px; }
-  .sg-course-best { margin-top: 6px; font-size: 12px; color: #789; }
+  .sg-course-card.selected { border-color: #ffd94a; box-shadow: 0 0 0 4px rgba(255,217,74,0.3), 0 0 22px rgba(255,190,60,0.35); transform: translateY(-4px) scale(1.03); }
+  .sg-course-thumb { width: 100%; height: 96px; border-radius: 14px; margin-bottom: 10px; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.18), inset 0 -18px 24px rgba(0,0,0,0.25); }
+  .sg-course-name { font-weight: 900; color: #eaf4ff; font-size: 16px; margin-bottom: 4px; }
+  .sg-course-stars { color: #ffd94a; font-size: 18px; letter-spacing: 2px; text-shadow: 0 0 8px rgba(255,200,60,0.45); }
+  .sg-course-best { margin-top: 6px; font-size: 12px; color: #8fa0cc; }
 
   .sg-pause-overlay {
-    position: absolute; inset: 0; background: rgba(60,20,40,0.45);
+    position: absolute; inset: 0; background: rgba(3,6,18,0.6);
     display: flex; align-items: center; justify-content: center;
   }
   .sg-pause-box {
-    background: rgba(255,250,246,0.96); border-radius: 30px; border: 6px solid #fff;
-    padding: 34px 50px; text-align: center; box-shadow: 0 14px 40px rgba(120,50,90,0.4);
+    background: rgba(10,15,36,0.94); border-radius: 30px; border: 6px solid rgba(90,130,230,0.32);
+    padding: 34px 50px; text-align: center;
+    box-shadow: 0 14px 44px rgba(0,0,0,0.7), inset 0 1px 0 rgba(150,190,255,0.18);
   }
 
   .sg-result-table { border-collapse: collapse; margin: 0 auto 18px; }
   .sg-result-table th, .sg-result-table td {
-    padding: 7px 16px; font-size: 15px; color: #7a4560; text-align: left;
-    border-bottom: 2px dashed #ffdcec;
+    padding: 7px 16px; font-size: 15px; color: #cfe2ff; text-align: left;
+    border-bottom: 2px dashed rgba(120,150,230,0.28);
   }
-  .sg-result-table th { color: #d43d7c; font-size: 13px; }
-  .sg-result-table tr.me td { color: #d43d7c; font-weight: 900; }
+  .sg-result-table th { color: #ffe27a; font-size: 13px; }
+  .sg-result-table tr.me td { color: #7ef0d8; font-weight: 900; text-shadow: 0 0 10px rgba(126,240,216,0.4); }
   .sg-rank-cell { font-weight: 900; }
 
   .sg-confetti {
@@ -145,7 +165,7 @@
 
   .sg-award-podium-label {
     position: absolute; left: 50%; bottom: 8%; transform: translateX(-50%);
-    text-align: center; color: #fff; text-shadow: 0 2px 0 #b8467f, 0 4px 10px rgba(0,0,0,0.35);
+    text-align: center; color: #fff; text-shadow: 0 2px 0 #14205a, 0 0 18px rgba(255,210,90,0.5), 0 4px 10px rgba(0,0,0,0.45);
     font-size: 20px; font-weight: 900;
   }
   `;
@@ -288,6 +308,11 @@
       const n = this._courseIds.length;
       if (Game.input.justPressed('ArrowRight', 'KeyD')) { this._courseCursor = (this._courseCursor + 1) % n; this._refreshCourseGrid(); }
       else if (Game.input.justPressed('ArrowLeft', 'KeyA')) { this._courseCursor = (this._courseCursor - 1 + n) % n; this._refreshCourseGrid(); }
+      else if (this.mode === 'gp' && Game.input.justPressed('KeyX', 'Backspace')) {
+        // 3つ選び終えた後でもキーボードでやり直せる「1つ取り消し」
+        this._gpPicked.pop();
+        this._refreshCourseGrid();
+      }
       else if (this._confirmPressed()) { this._confirmCourseSelect(); }
     },
 
@@ -369,7 +394,8 @@
       if (it.id === 'gp') {
         this.gpCourseIdx = 0;
         this.gpPoints = {};
-        this.selectedCourseId = SC.gpCourseOrder[0];
+        this.gpCourses = null; // 出走コースはコース選択画面で3つ選ぶ
+        this.selectedCourseId = SC.courseList[0];
       }
       // タイムアタックはCPUがいないので難易度選択を飛ばす
       this.setState(it.id === 'ta' ? 'charSelect' : 'diffSelect');
@@ -654,27 +680,27 @@
 
     _confirmCharSelect() {
       this.selectedCharId = Game.characters.list[this._charCursor].id;
-      if (this.mode === 'gp') {
-        this._startGpRun();
-      } else {
-        this.setState('courseSelect');
-      }
+      // GPもコース選択を経由する(7コースから3つを選ぶ形式)
+      this.setState('courseSelect');
     },
 
     // =========================================================
-    // 3. コース選択(シングル/TAのみ)
+    // 3. コース選択(シングル/TA=1つ選ぶ、GP=3つ選ぶ)
     // =========================================================
     _buildCourseSelectLayer() {
       const layer = el('div', 'layer');
       const panel = el('div', 'sg-panel');
-      panel.appendChild(el('div', 'sg-heading', 'コースをえらぼう'));
+      const heading = el('div', 'sg-heading', 'コースをえらぼう');
+      panel.appendChild(heading);
+      const hint = el('div', 'sg-course-hint', '');
+      panel.appendChild(hint);
       const grid = el('div', 'sg-course-grid');
       panel.appendChild(grid);
       const foot = el('div', null);
       foot.style.textAlign = 'center';
       foot.style.marginTop = '18px';
       const okBtn = el('div', 'sg-btn', 'このコースでスタート');
-      okBtn.addEventListener('click', () => this._confirmCourseSelect());
+      okBtn.addEventListener('click', () => this._onCourseOkButton());
       const backBtn = el('div', 'sg-btn ghost small', 'キャラ選択へ戻る');
       backBtn.addEventListener('click', () => this.setState('charSelect'));
       foot.appendChild(okBtn);
@@ -684,12 +710,24 @@
       this.root.appendChild(layer);
       this.layers.courseSelect = layer;
       this._courseGridEl = grid;
+      this._courseHeading = heading;
+      this._courseHint = hint;
+      this._courseOkBtn = okBtn;
       this._courseCursor = 0;
-      this._courseIds = SC.gpCourseOrder;
+      this._courseIds = SC.courseList;
+      this._gpPicked = [];
     },
 
     _enterCourseSelect() {
       this._ensureBgScene();
+      this._gpPicked = [];
+      if (this.mode === 'gp') {
+        this._courseHeading.textContent = 'グランプリ: 3コースをえらぼう';
+        this._courseHint.textContent = 'Enter/タップでえらぶ(もう一度でとりけし)・3つえらんだらスタート';
+      } else {
+        this._courseHeading.textContent = 'コースをえらぼう';
+        this._courseHint.textContent = '';
+      }
       this._populateCourseGrid();
       this._refreshCourseGrid();
     },
@@ -710,28 +748,81 @@
       this._courseIds.forEach((id, i) => {
         const def = Game.courses[id];
         const card = el('div', 'sg-course-card');
+        const pick = el('div', 'sg-course-pick hidden', '');
+        card.appendChild(pick);
         const thumb = el('div', 'sg-course-thumb');
         thumb.style.background = this._courseThumbColor(id);
         card.appendChild(thumb);
         card.appendChild(el('div', 'sg-course-name', def.displayName || id));
-        const stars = '★'.repeat(SC.courseDifficulty[id] || 1) + '☆'.repeat(3 - (SC.courseDifficulty[id] || 1));
+        const d = SC.courseDifficulty[id] || 1;
+        const stars = '★'.repeat(d) + '☆'.repeat(SC.courseStarMax - d);
         card.appendChild(el('div', 'sg-course-stars', stars));
         if (this.mode === 'ta') {
           const best = this._loadBestTime(id);
           card.appendChild(el('div', 'sg-course-best', `ベスト: ${best ? SC.fmt(best.total) : '--:--.--'}`));
         }
-        card.addEventListener('click', () => { this._courseCursor = i; this._refreshCourseGrid(); });
-        card.addEventListener('dblclick', () => { this._courseCursor = i; this._confirmCourseSelect(); });
+        card.addEventListener('click', () => {
+          this._courseCursor = i;
+          if (this.mode === 'gp') this._toggleGpPick(i);
+          this._refreshCourseGrid();
+        });
+        card.addEventListener('dblclick', () => {
+          this._courseCursor = i;
+          if (this.mode !== 'gp') this._confirmCourseSelect();
+        });
         this._courseGridEl.appendChild(card);
       });
     },
 
     _refreshCourseGrid() {
       const cards = this._courseGridEl.children;
-      for (let i = 0; i < cards.length; i++) cards[i].classList.toggle('selected', i === this._courseCursor);
+      for (let i = 0; i < cards.length; i++) {
+        cards[i].classList.toggle('selected', i === this._courseCursor);
+        const pick = cards[i].querySelector('.sg-course-pick');
+        if (pick) {
+          const order = this._gpPicked.indexOf(this._courseIds[i]);
+          pick.classList.toggle('hidden', this.mode !== 'gp' || order < 0);
+          if (order >= 0) pick.textContent = String(order + 1);
+        }
+      }
+      if (this.mode === 'gp') {
+        const left = SC.gpRaceCount - this._gpPicked.length;
+        this._courseOkBtn.textContent = left > 0 ? `あと${left}コース` : 'グランプリ開始!';
+        this._courseOkBtn.classList.toggle('ghost', left > 0);
+      } else {
+        this._courseOkBtn.textContent = 'このコースでスタート';
+        this._courseOkBtn.classList.remove('ghost');
+      }
+    },
+
+    // GP: カーソル位置のコースの選択/取り消しをトグルする
+    _toggleGpPick(i) {
+      const id = this._courseIds[i];
+      const at = this._gpPicked.indexOf(id);
+      if (at >= 0) this._gpPicked.splice(at, 1);
+      else if (this._gpPicked.length < SC.gpRaceCount) this._gpPicked.push(id);
+    },
+
+    // フッターのOKボタン(クリック/タップ)
+    _onCourseOkButton() {
+      if (this.mode === 'gp') {
+        if (this._gpPicked.length === SC.gpRaceCount) this._startGpRun(this._gpPicked.slice());
+        return;
+      }
+      this._confirmCourseSelect();
     },
 
     _confirmCourseSelect() {
+      if (this.mode === 'gp') {
+        // 3つ揃っていれば決定=開始、揃うまではトグル
+        if (this._gpPicked.length === SC.gpRaceCount) {
+          this._startGpRun(this._gpPicked.slice());
+        } else {
+          this._toggleGpPick(this._courseCursor);
+          this._refreshCourseGrid();
+        }
+        return;
+      }
       this.selectedCourseId = this._courseIds[this._courseCursor];
       this._startSingleOrTa();
     },
@@ -767,14 +858,15 @@
       return pool.slice(0, count);
     },
 
-    _startGpRun() {
-      // グランプリ用ロースター(プレイヤー+CPU7)を初回のみ決定し、3コース通して使い回す
+    _startGpRun(courseIds) {
+      // グランプリ用ロースター(プレイヤー+CPU7)を初回のみ決定し、選んだ3コースを通して使い回す
+      this.gpCourses = courseIds && courseIds.length ? courseIds : SC.courseList.slice(0, SC.gpRaceCount);
       const cpu = this._pickRoster(this.selectedCharId, Game.config.race.kartCount - 1);
       this.gpEntries = [this.selectedCharId, ...cpu.map((c) => c.id)];
       this.gpPoints = {};
       for (const id of this.gpEntries) this.gpPoints[id] = 0;
       this.gpCourseIdx = 0;
-      this.selectedCourseId = SC.gpCourseOrder[0];
+      this.selectedCourseId = this.gpCourses[0];
       this._launchRace({ isTA: false, charIds: this.gpEntries });
     },
 
@@ -1056,7 +1148,7 @@
         }
         this._resultNextBtn.textContent = 'タイムアタックへ戻る';
       } else if (isGp) {
-        const isLast = this.gpCourseIdx >= SC.gpCourseOrder.length - 1;
+        const isLast = this.gpCourseIdx >= (this.gpCourses ? this.gpCourses.length : SC.gpRaceCount) - 1;
         this._resultNextBtn.textContent = isLast ? '表彰式へ' : '次のレースへ';
       } else {
         this._resultNextBtn.textContent = 'コース選択へ';
@@ -1074,12 +1166,13 @@
         this.setState('courseSelect');
         return;
       }
-      // グランプリ
+      // グランプリ(選んだ3コースを順に走る)
+      const courses = this.gpCourses || SC.courseList.slice(0, SC.gpRaceCount);
       this.gpCourseIdx++;
-      if (this.gpCourseIdx >= SC.gpCourseOrder.length) {
+      if (this.gpCourseIdx >= courses.length) {
         this.setState('award');
       } else {
-        this.selectedCourseId = SC.gpCourseOrder[this.gpCourseIdx];
+        this.selectedCourseId = courses[this.gpCourseIdx];
         this._launchRace({ isTA: false, charIds: this.gpEntries });
       }
     },

@@ -30,21 +30,22 @@ Game.touch = {
 #touchRoot.paused #tcPause { display: flex; }
 .tc-btn {
   position: absolute; pointer-events: auto; touch-action: none;
-  border-radius: 50%; border: 3px solid rgba(255,255,255,0.85);
-  background: rgba(255,143,176,0.45);
+  border-radius: 50%; border: 3px solid rgba(220,240,255,0.8);
+  background: rgba(40,56,110,0.5);
   color: #fff; font-weight: 900; text-align: center;
   display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 3px 0 rgba(107,53,80,0.3);
+  box-shadow: 0 3px 0 rgba(6,10,28,0.55), 0 0 14px rgba(60,140,255,0.2);
+  text-shadow: 0 1px 3px rgba(0,10,40,0.7);
   -webkit-tap-highlight-color: transparent;
 }
-.tc-btn.on { background: rgba(255,143,176,0.85); transform: scale(0.94); }
+.tc-btn.on { background: rgba(90,150,255,0.75); transform: scale(0.94); }
 #tcLeft  { left: 18px;  bottom: 96px; width: 92px; height: 92px; font-size: 40px; }
 #tcRight { left: 124px; bottom: 96px; width: 92px; height: 92px; font-size: 40px; }
-#tcBrake { left: 71px;  bottom: 200px; width: 64px; height: 64px; font-size: 14px; background: rgba(120,120,140,0.4); }
-#tcAccel { right: 20px; bottom: 84px; width: 116px; height: 116px; font-size: 20px; background: rgba(127,227,196,0.5); }
-#tcDrift { right: 148px; bottom: 66px; width: 92px; height: 92px; font-size: 16px; background: rgba(85,200,255,0.5); }
-#tcItem  { right: 44px; bottom: 214px; width: 76px; height: 76px; font-size: 15px; background: rgba(255,210,62,0.55); }
-#tcPause { right: 16px; top: 64px; width: 52px; height: 52px; font-size: 20px; background: rgba(120,120,140,0.4); }
+#tcBrake { left: 71px;  bottom: 200px; width: 64px; height: 64px; font-size: 14px; background: rgba(52,58,86,0.55); }
+#tcAccel { right: 20px; bottom: 84px; width: 116px; height: 116px; font-size: 20px; background: rgba(22,150,112,0.55); }
+#tcDrift { right: 148px; bottom: 66px; width: 92px; height: 92px; font-size: 16px; background: rgba(40,130,220,0.55); }
+#tcItem  { right: 44px; bottom: 214px; width: 76px; height: 76px; font-size: 15px; background: rgba(210,160,36,0.6); }
+#tcPause { right: 16px; top: 64px; width: 52px; height: 52px; font-size: 20px; background: rgba(52,58,86,0.55); }
 `;
     document.head.appendChild(style);
 

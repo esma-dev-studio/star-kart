@@ -133,6 +133,43 @@
         drumPattern: 'perc',
         melodyGain: 0.14, bassGain: 0.18, drumGain: 0.18,
       },
+      voidSpiral: {
+        // 次元の裂け目: 半音の揺らぎとスウィングでうねる不安定シンセ(Em-C-F#m-Bm)
+        tempo: 134, bars: 8, swing: 0.10,
+        chords: [
+          { root: 164.81, third: 196.00, fifth: 246.94 }, // Em
+          { root: 130.81, third: 164.81, fifth: 196.00 }, // C
+          { root: 185.00, third: 220.00, fifth: 277.18 }, // F#m
+          { root: 123.47, third: 146.83, fifth: 185.00 }, // Bm
+        ],
+        melodyWave: 'square',
+        arpeggio: true,
+        melody: [
+          0, -1, 3, 7, 6, -1, 3, 0, 2, -1, 5, 8, 7, -1, 5, 2,
+          0, 3, 6, 7, 10, -1, 7, 6, 3, -1, 2, 1, 0, -1, -1, -1,
+        ],
+        bassWave: 'triangle',
+        drumPattern: 'perc',
+        melodyGain: 0.13, bassGain: 0.15, drumGain: 0.15,
+      },
+      singularity: {
+        // 事象の地平線: 低く重いベースが刻む緊迫ダークテクノ(Dm-Bb-Gm-A)
+        tempo: 144, bars: 8, swing: 0,
+        chords: [
+          { root: 146.83, third: 174.61, fifth: 220.00 }, // Dm
+          { root: 116.54, third: 146.83, fifth: 174.61 }, // Bb
+          { root: 98.00,  third: 116.54, fifth: 146.83 }, // Gm
+          { root: 110.00, third: 138.59, fifth: 164.81 }, // A
+        ],
+        melodyWave: 'sawtooth',
+        melody: [
+          0, 0, -1, 0, 3, -1, 0, -1, 5, -1, 3, -1, 1, 0, -1, 0,
+          0, 0, -1, 0, 3, 5, -1, 7, 8, 7, 5, 3, 1, -1, 0, -1,
+        ],
+        bassWave: 'square',
+        drumPattern: 'perc',
+        melodyGain: 0.13, bassGain: 0.19, drumGain: 0.19,
+      },
       result: {
         tempo: 150, bars: 4, swing: 0,
         chords: [

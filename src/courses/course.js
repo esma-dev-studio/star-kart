@@ -241,18 +241,58 @@ Game.Course = class Course {
     const top = new THREE.Color().setHSL(hsl.h, Math.min(1, hsl.s + 0.18), Math.max(0, hsl.l - 0.16));
     const horizon = new THREE.Color().setHSL(hsl.h, Math.max(0, hsl.s - 0.05), Math.min(1, hsl.l + 0.14));
     const cv = document.createElement('canvas');
-    cv.width = 4; cv.height = 256;
+    // 星を描くため横にも解像度を持たせる(生成は一度きりなので負荷なし)
+    cv.width = 512; cv.height = 256;
     const x = cv.getContext('2d');
     const grad = x.createLinearGradient(0, 0, 0, 256);
     grad.addColorStop(0, '#' + top.getHexString());
     grad.addColorStop(0.55, '#' + base.getHexString());
     grad.addColorStop(1, '#' + horizon.getHexString());
     x.fillStyle = grad;
-    x.fillRect(0, 0, 4, 256);
+    x.fillRect(0, 0, 512, 256);
+
+    // 星屑: 暗い空ほど濃く自動で入れる(STAR KARTの宇宙感の要)。
+    // colors.stars で明示上書きも可(0=なし〜1=満天)
+    const starAmt = c.stars != null ? c.stars
+      : hsl.l < 0.16 ? 1 : hsl.l < 0.3 ? 0.7 : hsl.l < 0.45 ? 0.25 : 0;
+    if (starAmt > 0) {
+      let seed = 20260712;
+      const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return (seed % 10000) / 10000; };
+      // 星雲: 最暗の空にだけ、ごく薄い色斑を2つ(空の色相±で馴染ませる)
+      if (hsl.l < 0.2) {
+        for (let i = 0; i < 2; i++) {
+          const nx = 80 + rnd() * 350, ny = 30 + rnd() * 90, nr = 60 + rnd() * 50;
+          const ncol = new THREE.Color().setHSL((hsl.h + (i === 0 ? 0.08 : -0.09) + 1) % 1, 0.55, 0.42);
+          const ng = x.createRadialGradient(nx, ny, 0, nx, ny, nr);
+          ng.addColorStop(0, `rgba(${ncol.r * 255 | 0},${ncol.g * 255 | 0},${ncol.b * 255 | 0},0.16)`);
+          ng.addColorStop(1, 'rgba(0,0,0,0)');
+          x.fillStyle = ng;
+          x.beginPath(); x.arc(nx, ny, nr, 0, Math.PI * 2); x.fill();
+        }
+      }
+      // 星: 上空70%に、明るさ/大きさをばらして。数個は十字の輝きを持つ一等星
+      const n = Math.round(230 * starAmt);
+      for (let i = 0; i < n; i++) {
+        const sx = rnd() * 512, sy = rnd() * 175;
+        const alt = 1 - sy / 175; // 上ほどくっきり
+        const a = (0.25 + rnd() * 0.75) * (0.4 + alt * 0.6);
+        x.fillStyle = `rgba(255,255,255,${a.toFixed(2)})`;
+        const sz = rnd() < 0.16 ? 2 : 1;
+        x.fillRect(sx, sy, sz, sz);
+      }
+      const bright = Math.round(7 * starAmt);
+      for (let i = 0; i < bright; i++) {
+        const sx = 10 + rnd() * 492, sy = 6 + rnd() * 130;
+        x.fillStyle = 'rgba(255,255,255,0.95)';
+        x.fillRect(sx - 0.5, sy - 3, 1.4, 6.4);
+        x.fillRect(sx - 3, sy - 0.5, 6.4, 1.4);
+      }
+    }
+    const tex = new THREE.CanvasTexture(cv);
     const dome = new THREE.Mesh(
       new THREE.SphereGeometry(950, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.62),
       new THREE.MeshBasicMaterial({
-        map: new THREE.CanvasTexture(cv), side: THREE.BackSide, fog: false, depthWrite: false,
+        map: tex, side: THREE.BackSide, fog: false, depthWrite: false,
       })
     );
     dome.position.y = -40;
@@ -275,11 +315,13 @@ Game.Course = class Course {
     };
     blob(40, 40, 26); blob(64, 32, 30); blob(90, 42, 24); blob(60, 46, 20);
     const tex = new THREE.CanvasTexture(cv);
+    // 真っ白のままだと夜/夕暮れコースで浮くため、空の色へ少し寄せて大気に馴染ませる
+    const tint = new THREE.Color(0xffffff).lerp(new THREE.Color(this.def.colors.fog ?? this.def.colors.sky), 0.3);
     let seed = 99;
     const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
     for (let i = 0; i < 10; i++) {
       const sp = new THREE.Sprite(new THREE.SpriteMaterial({
-        map: tex, transparent: true, opacity: 0.85, fog: false, depthWrite: false,
+        map: tex, transparent: true, opacity: 0.85, fog: false, depthWrite: false, color: tint,
       }));
       const a = rnd() * Math.PI * 2, r = 320 + rnd() * 280;
       sp.position.set(Math.cos(a) * r, 95 + rnd() * 80, Math.sin(a) * r);
