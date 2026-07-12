@@ -7,7 +7,7 @@
     rootId: 'screens',
     resultAutoDelaySec: 2,          // onRaceEnd から自動でリザルト画面を出すまでの秒数
     gpPointsByRank: [15, 12, 10, 8, 6, 4, 2, 1],
-    gpCourseOrder: ['cookieTown', 'chocoCanyon', 'skyCastle'],
+    gpCourseOrder: ['cookieTown', 'auroraFrost', 'chocoCanyon', 'skyCastle', 'solarForge'],
     bgCamRadius: 46,
     bgCamHeight: 22,
     bgCamSpeed: 0.05,               // rad/s
@@ -15,7 +15,7 @@
     portraitSize: 108,
     statBarMax: 5,
     taStorageKeyPrefix: 'sugariaGP_ta_',
-    courseDifficulty: { cookieTown: 1, chocoCanyon: 2, skyCastle: 3 },
+    courseDifficulty: { cookieTown: 1, auroraFrost: 2, chocoCanyon: 2, skyCastle: 3, solarForge: 3 },
     awardCamRadius: 16,
     awardCamHeight: 7,
     awardCamSpeed: 0.22,
@@ -103,7 +103,7 @@
   .sg-stat-bar { flex: 1; height: 7px; background: #f3dbe6; border-radius: 5px; overflow: hidden; }
   .sg-stat-fill { height: 100%; border-radius: 5px; background: linear-gradient(90deg,#ffb6d9,#ff6fa8); }
 
-  .sg-course-grid { display: flex; gap: 20px; }
+  .sg-course-grid { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; max-width: 1240px; }
   .sg-course-card {
     width: 220px; background: linear-gradient(180deg,#fff,#f2f8ff); border-radius: 22px;
     border: 4px solid #cfe8ff; padding: 16px; text-align: center; cursor: pointer;
@@ -696,7 +696,13 @@
 
     _courseThumbColor(id) {
       const def = Game.courses[id];
-      return def && def.colors ? `#${def.colors.road.toString(16).padStart(6, '0')}` : '#ddd';
+      if (!def || !def.colors) return '#ddd';
+      // road は '#rrggbb' 文字列、sky は数値。空→路面のグラデでコースの雰囲気を出す
+      const road = typeof def.colors.road === 'string'
+        ? def.colors.road
+        : `#${def.colors.road.toString(16).padStart(6, '0')}`;
+      const sky = `#${(def.colors.sky >>> 0).toString(16).padStart(6, '0')}`;
+      return `linear-gradient(180deg, ${sky} 0%, ${sky} 45%, ${road} 46%, ${road} 100%)`;
     },
 
     _populateCourseGrid() {

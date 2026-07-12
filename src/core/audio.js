@@ -96,6 +96,43 @@
         drumPattern: 'sparkle',
         melodyGain: 0.13, bassGain: 0.12, drumGain: 0.10,
       },
+      auroraFrost: {
+        // 夜の氷原: 冷たくきらめくドリーミーなアルペジオ(Am-F-C-G)
+        tempo: 126, bars: 8, swing: 0,
+        chords: [
+          { root: 220.00, third: 261.63, fifth: 329.63 }, // Am
+          { root: 174.61, third: 220.00, fifth: 261.63 }, // F
+          { root: 261.63, third: 329.63, fifth: 392.00 }, // C
+          { root: 196.00, third: 246.94, fifth: 293.66 }, // G
+        ],
+        melodyWave: 'triangle',
+        arpeggio: true,
+        melody: [
+          0, -1, 3, 7, 10, -1, 7, 3, 2, -1, 5, 9, 12, -1, 9, 5,
+          0, 3, 7, 10, 12, -1, 10, 7, 5, -1, 3, 2, 0, -1, -1, -1,
+        ],
+        bassWave: 'sine',
+        drumPattern: 'sparkle',
+        melodyGain: 0.13, bassGain: 0.13, drumGain: 0.09,
+      },
+      solarForge: {
+        // 恒星炉の重工業地帯: 下降形(Dm-C-Bb-A)のドライビングインダストリアル
+        tempo: 138, bars: 8, swing: 0,
+        chords: [
+          { root: 146.83, third: 174.61, fifth: 220.00 }, // Dm
+          { root: 130.81, third: 164.81, fifth: 196.00 }, // C
+          { root: 116.54, third: 146.83, fifth: 174.61 }, // Bb
+          { root: 110.00, third: 138.59, fifth: 164.81 }, // A
+        ],
+        melodyWave: 'sawtooth',
+        melody: [
+          0, 0, 3, 5, 7, -1, 7, 8, 7, 5, 3, -1, 0, 3, 5, 3,
+          0, 0, 3, 5, 7, 10, 8, 7, 5, 3, 2, -1, 0, -1, -1, -1,
+        ],
+        bassWave: 'square',
+        drumPattern: 'perc',
+        melodyGain: 0.14, bassGain: 0.18, drumGain: 0.18,
+      },
       result: {
         tempo: 150, bars: 4, swing: 0,
         chords: [
