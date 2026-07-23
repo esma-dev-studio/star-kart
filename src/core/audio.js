@@ -25,6 +25,39 @@
       lowpassSpeedMul: 2600,
     },
 
+    // 走行音レイヤー(エンジン音に重ねる持続音)。合計してもエンジンを覆わない控えめな音量に
+    drive: {
+      // オフロード走行音: ノイズ→lowpass。未舗装路+接地+速度>speedMinで立ち上がる
+      offroad: {
+        gainMax: 0.14,
+        speedMin: 2,
+        filterMin: 400, filterMax: 900,
+        attackTau: 0.08,  // 立ち上がりは自然に
+        releaseTau: 0.035, // 抜けるときは素早く0へ
+      },
+      // ドリフトスキール: ノイズ→bandpass(Q高め)。速いほど高く鋭い音に
+      drift: {
+        gainMax: 0.10,
+        gainFloorRatio: 0.4, // ドリフト開始直後(低速側)でも最低限鳴る比率
+        filterBase: 1600, filterRange: 500,
+        qMin: 6, qMax: 11,
+        smoothTau: 0.05,
+      },
+      // 風切り音: ノイズ→highpass。高速域で速度の2乗で立ち上がる
+      wind: {
+        gainMax: 0.08,
+        filterFreq: 2500,
+        ratioThreshold: 0.7, // speed/maxSpeedがこれを超えてから立ち上がる
+        boostMul: 1.3,       // ブースト中はさらに+30%
+        smoothTau: 0.06,
+      },
+      // ブースト開始の加速ワッシュ(単発ノイズスイープ)
+      whoosh: {
+        filterStart: 600, filterEnd: 6000, sweepDur: 0.4,
+        dur: 0.45, gainPeak: 0.16,
+      },
+    },
+
     // BGM定義。tempo(BPM), key(ルート周波数Hz), steps(1小節=16step)*bars
     songs: {
       title: {
@@ -215,6 +248,8 @@
   // URLに ?mute=1 が付いていたら最初から消音する(自動テスト・検証セッション用。
   // リロードしてもクエリは残るので、検証中に音が漏れない)
   let muted = /[?&]mute=1/.test(location.search);
+  // 設定画面用の音量(0〜1、各バスの基準ゲインに乗算)。setVolumesで変更・保存
+  let volumes = { bgm: 1, sfx: 1 };
 
   // ==== BGMシーケンサ状態 ====
   let currentBgmId = null;
@@ -222,6 +257,9 @@
 
   // ==== エンジン音状態 ====
   let engine = null; // { osc, gain, filter }
+
+  // ==== 走行音レイヤー状態(オフロード/ドリフトスキール/風切り音) ====
+  let drive = null; // { offSrc/offFilter/offGain, driftSrc/driftFilter/driftGain, windSrc/windFilter/windGain, prevBoostT }
 
   function safe(fn) {
     return function (...args) {
@@ -236,6 +274,28 @@
     const d = buf.getChannelData(0);
     for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
     return buf;
+  }
+
+  // ==== 音量設定(bgm/sfx、各0〜1) ====
+  function clamp01(v) {
+    return Math.min(1, Math.max(0, v));
+  }
+
+  function loadVolumes() {
+    try {
+      const raw = localStorage.getItem('sgVolumes');
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        if (typeof parsed.bgm === 'number' && isFinite(parsed.bgm)) volumes.bgm = clamp01(parsed.bgm);
+        if (typeof parsed.sfx === 'number' && isFinite(parsed.sfx)) volumes.sfx = clamp01(parsed.sfx);
+      }
+    } catch (e) { /* 壊れた保存値は無視し既定値のまま使う */ }
+  }
+
+  function applyVolumesToBuses() {
+    if (bgmBus) bgmBus.gain.value = C.bgmBusGain * volumes.bgm;
+    if (sfxBus) sfxBus.gain.value = C.sfxBusGain * volumes.sfx;
   }
 
   function init() {
@@ -258,9 +318,9 @@
       compressorNode.release.value = C.compressor.release;
 
       bgmBus = ctx.createGain();
-      bgmBus.gain.value = C.bgmBusGain;
       sfxBus = ctx.createGain();
-      sfxBus.gain.value = C.sfxBusGain;
+      loadVolumes();          // 保存済み音量設定を読み込む(壊れていれば既定値のまま)
+      applyVolumesToBuses();  // bgmBus/sfxBus.gainへ反映
 
       bgmBus.connect(compressorNode);
       sfxBus.connect(compressorNode);
@@ -615,6 +675,136 @@
     engine = null;
   }
 
+  // ==== 走行音レイヤー(オフロード/ドリフトスキール/風切り音) ====
+  // エンジン音と同じく「カートに随伴する」持続音源。既存noiseBufferを3系統で使い回す
+  function startDriveLayer() {
+    if (drive) return;
+    const Dc = C.drive;
+
+    // オフロード走行音: ノイズ→lowpass→ゲイン
+    const offSrc = ctx.createBufferSource();
+    offSrc.buffer = noiseBuffer;
+    offSrc.loop = true;
+    const offFilter = ctx.createBiquadFilter();
+    offFilter.type = 'lowpass';
+    offFilter.frequency.value = Dc.offroad.filterMin;
+    const offGain = ctx.createGain();
+    offGain.gain.value = 0.0001;
+    offSrc.connect(offFilter); offFilter.connect(offGain); offGain.connect(sfxBus);
+    offSrc.start();
+
+    // ドリフトスキール: ノイズ→bandpass(Q高め)→ゲイン
+    const driftSrc = ctx.createBufferSource();
+    driftSrc.buffer = noiseBuffer;
+    driftSrc.loop = true;
+    const driftFilter = ctx.createBiquadFilter();
+    driftFilter.type = 'bandpass';
+    driftFilter.frequency.value = Dc.drift.filterBase;
+    driftFilter.Q.value = Dc.drift.qMin;
+    const driftGain = ctx.createGain();
+    driftGain.gain.value = 0.0001;
+    driftSrc.connect(driftFilter); driftFilter.connect(driftGain); driftGain.connect(sfxBus);
+    driftSrc.start();
+
+    // 風切り音: ノイズ→highpass→ゲイン
+    const windSrc = ctx.createBufferSource();
+    windSrc.buffer = noiseBuffer;
+    windSrc.loop = true;
+    const windFilter = ctx.createBiquadFilter();
+    windFilter.type = 'highpass';
+    windFilter.frequency.value = Dc.wind.filterFreq;
+    const windGain = ctx.createGain();
+    windGain.gain.value = 0.0001;
+    windSrc.connect(windFilter); windFilter.connect(windGain); windGain.connect(sfxBus);
+    windSrc.start();
+
+    drive = {
+      offSrc, offFilter, offGain,
+      driftSrc, driftFilter, driftGain,
+      windSrc, windFilter, windGain,
+      prevBoostT: 0, // ブースト開始エッジ検出用(前フレームのboostT)
+    };
+  }
+
+  function stopDriveLayer() {
+    if (!drive) return;
+    try {
+      const t = ctx.currentTime;
+      drive.offGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.08);
+      drive.driftGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.08);
+      drive.windGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.08);
+      drive.offSrc.stop(t + 0.1);
+      drive.driftSrc.stop(t + 0.1);
+      drive.windSrc.stop(t + 0.1);
+    } catch (e) { /* noop */ }
+    drive = null;
+  }
+
+  // ブースト開始(boostTが0→正に遷移した瞬間)の加速ワッシュ。単発でsfxBusへ
+  function playBoostWhoosh() {
+    if (!ready || !ctx) return;
+    const W = C.drive.whoosh;
+    const t = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuffer;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(W.filterStart, t);
+    filter.frequency.exponentialRampToValueAtTime(W.filterEnd, t + W.sweepDur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(W.gainPeak, t + 0.04);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + W.dur);
+    src.connect(filter); filter.connect(g); g.connect(sfxBus);
+    src.start(t);
+    src.stop(t + W.dur + 0.05);
+  }
+
+  // 走行音レイヤーの毎フレーム更新(update()から呼ばれる)
+  function updateDriveLayer(kart, ratio, base, now) {
+    if (!drive) return;
+    const Dc = C.drive;
+    const P = Game.config.physics;
+    const spd = Math.max(0, kart.speed || 0);
+    const q = kart.lastQuery;
+
+    // --- オフロード走行音: 未舗装+接地+一定速度以上で速度比例、それ以外は素早く減衰 ---
+    const offroadOn = !!(q && q.surface === 'offroad' && kart.grounded && spd > Dc.offroad.speedMin);
+    if (offroadOn) {
+      const cap = base * (P.offroadMultiplier || 0.5); // オフロードでの実質最高速を基準に正規化
+      const r = Math.min(1, spd / Math.max(1, cap));
+      drive.offGain.gain.setTargetAtTime(Dc.offroad.gainMax * r, now, Dc.offroad.attackTau);
+      drive.offFilter.frequency.setTargetAtTime(
+        Dc.offroad.filterMin + (Dc.offroad.filterMax - Dc.offroad.filterMin) * r, now, 0.08);
+    } else {
+      drive.offGain.gain.setTargetAtTime(0.0001, now, Dc.offroad.releaseTau);
+    }
+
+    // --- ドリフトスキール: ドリフト中+接地で速度に応じてゲインとフィルタを上げる ---
+    const driftingOn = !!(kart.drift && kart.drift.state === 'drifting' && kart.grounded);
+    if (driftingOn) {
+      const floor = P.driftMinSpeed || 13; // ドリフト可能な最低速度を基準に正規化
+      const r = Math.min(1, Math.max(0, (spd - floor) / Math.max(1, base - floor)));
+      const g = Dc.drift.gainMax * (Dc.drift.gainFloorRatio + r * (1 - Dc.drift.gainFloorRatio));
+      drive.driftGain.gain.setTargetAtTime(g, now, Dc.drift.smoothTau);
+      drive.driftFilter.frequency.setTargetAtTime(Dc.drift.filterBase + Dc.drift.filterRange * r, now, Dc.drift.smoothTau);
+      drive.driftFilter.Q.setTargetAtTime(Dc.drift.qMin + (Dc.drift.qMax - Dc.drift.qMin) * r, now, Dc.drift.smoothTau);
+    } else {
+      drive.driftGain.gain.setTargetAtTime(0.0001, now, 0.05);
+    }
+
+    // --- 風切り音: speed/maxSpeedが閾値を超えた分の2乗で立ち上げ、ブースト中は+30% ---
+    const windR = Math.min(1, Math.max(0, (ratio - Dc.wind.ratioThreshold) / (1 - Dc.wind.ratioThreshold)));
+    let windTarget = Dc.wind.gainMax * windR * windR;
+    if (kart.boostT > 0) windTarget *= Dc.wind.boostMul;
+    drive.windGain.gain.setTargetAtTime(windTarget, now, Dc.wind.smoothTau);
+
+    // --- ブースト開始ワッシュ: 0→正のエッジでのみ1回発火 ---
+    const boostT = kart.boostT || 0;
+    if (boostT > 0 && drive.prevBoostT <= 0) playBoostWhoosh();
+    drive.prevBoostT = boostT;
+  }
+
   // ブースト時の「掛け声」風チャープ(キャラの体格でピッチが変わる)
   function shout(pitch = 1) {
     if (!ready || !ctx) return;
@@ -647,6 +837,7 @@
     engine.sub.frequency.setTargetAtTime(freq / 2, now, 0.05);
     engine.gain.gain.setTargetAtTime(C.engine.gain * (0.3 + ratio * 0.7), now, 0.08);
     engine.filter.frequency.setTargetAtTime(C.engine.lowpassBase + ratio * C.engine.lowpassSpeedMul, now, 0.06);
+    updateDriveLayer(playerKart, ratio, base, now);
   });
 
   // ==== kartコールバックのチェーン ====
@@ -688,11 +879,12 @@
     chain(kart, 'onJumpPad', () => shout(pitch * 1.1));
 
     attachedKarts.push(kart);
-    if (isPlayer) startEngine();
+    if (isPlayer) { startEngine(); startDriveLayer(); }
   });
 
   const detachAll = safe(function () {
     stopEngine();
+    stopDriveLayer();
     attachedKarts.length = 0;
     // コールバックのチェーン自体は残っても安全(prev呼び出しのみ)なので解除しない
   });
@@ -705,6 +897,20 @@
     if (masterGainNode) masterGainNode.gain.value = muted ? 0 : C.masterGain;
   });
 
+  // 設定画面用の音量API。setMuted/?mute=1のマスター消音とは独立(muted中も値は保存・反映され、
+  // 解除時にそのまま効く)。ctx初期化前でも呼べるように safe() ではなく素の関数として公開する
+  function setVolumes(v) {
+    v = v || {};
+    if (typeof v.bgm === 'number' && isFinite(v.bgm)) volumes.bgm = clamp01(v.bgm);
+    if (typeof v.sfx === 'number' && isFinite(v.sfx)) volumes.sfx = clamp01(v.sfx);
+    applyVolumesToBuses(); // ctx未初期化ならbgmBus/sfxBusがnullなので何もしない(init時にloadVolumesで反映される)
+    try { localStorage.setItem('sgVolumes', JSON.stringify(volumes)); } catch (e) { /* 保存失敗は無視(ゲーム続行優先) */ }
+  }
+
+  function getVolumes() {
+    return { bgm: volumes.bgm, sfx: volumes.sfx };
+  }
+
   Game.audio = {
     init,
     playBgm,
@@ -715,5 +921,7 @@
     update,
     detachAll,
     setMuted,
+    setVolumes,
+    getVolumes,
   };
 })();

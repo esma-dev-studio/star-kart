@@ -75,11 +75,25 @@ Game.app = {
     this.sun.target.updateMatrixWorld();
   },
 
+  // ヒットストップ: 強い衝撃の瞬間だけ時間を約15%に落とす(完全停止より物理が安全で、
+  // 「ガツン」という手応えが出る)。トリガーはCameraCtrl.addShakeの大衝撃(m>=0.5)
+  hitStop(sec) {
+    this._hitStopT = Math.max(this._hitStopT || 0, sec);
+  },
+
+  // スローモーション(ゴールの瞬間など)。sec秒間、時間をscale倍で流す
+  slowMo(sec, scale) {
+    this._slowMoT = sec;
+    this._slowMoScale = scale;
+  },
+
   start(updateFn) {
     this.updateFn = updateFn;
     const loop = () => {
       requestAnimationFrame(loop);
-      const dt = Math.min(this.clock.getDelta(), 1 / 30);
+      let dt = Math.min(this.clock.getDelta(), 1 / 30);
+      if (this._hitStopT > 0) { this._hitStopT -= dt; dt *= 0.15; }
+      else if (this._slowMoT > 0) { this._slowMoT -= dt; dt *= (this._slowMoScale || 0.35); }
       if (this.updateFn) this.updateFn(dt);
       Game.input.endFrame();
       if (this.scene) this.renderer.render(this.scene, this.camera);
@@ -103,6 +117,8 @@ Game.CameraCtrl = class CameraCtrl {
   addShake(m) {
     this._shake = Math.max(this._shake, m);
     this._punch = Math.max(this._punch || 0, m * 10); // 一瞬FOVが広がる衝撃表現
+    // スピン級の大衝撃だけヒットストップ(壁の小当たりで多発させない)
+    if (m >= 0.5 && Game.app && Game.app.hitStop) Game.app.hitStop(0.07);
   }
 
   snapTo(kart) {
@@ -143,10 +159,18 @@ Game.CameraCtrl = class CameraCtrl {
       this._shake = Math.max(0, this._shake - dt * 1.6);
     }
 
+    // コーナー内側への視線先行(プロのカメラはハンドルを切った方向を先に見る)。
+    // 旋回残量(target-angle)に比例して注視点を横へずらし、減衰追従でスッと戻す
+    const turnRem = U.wrapAngle(target - this.angle);
+    this._lookSide = U.damp(
+      this._lookSide || 0,
+      U.clamp(turnRem * 2.0, -1, 1) * (C.lookSide ?? 2.4),
+      3.5, dt);
+    const rightX = Math.cos(this.angle), rightZ = -Math.sin(this.angle);
     const look = new THREE.Vector3(
-      kart.pos.x + Math.sin(this.angle) * C.lookAhead,
+      kart.pos.x + Math.sin(this.angle) * C.lookAhead + rightX * this._lookSide,
       kart.pos.y + C.lookHeight,
-      kart.pos.z + Math.cos(this.angle) * C.lookAhead);
+      kart.pos.z + Math.cos(this.angle) * C.lookAhead + rightZ * this._lookSide);
     this.camera.lookAt(look);
 
     // ドリフト時にわずかにロール(疾走感)

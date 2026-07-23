@@ -33,7 +33,13 @@
   const STYLE = `
   #${SC.rootId} { position: fixed; inset: 0; z-index: 40; pointer-events: none; }
   #${SC.rootId} .layer { position: absolute; inset: 0; pointer-events: none; }
-  #${SC.rootId} .layer.active { pointer-events: auto; }
+  #${SC.rootId} .layer.active { pointer-events: auto; animation: sg-screen-in 0.26s ease both; }
+  /* 画面遷移: 全レイヤー共通のエンター演出(フェード+わずかな浮き上がり)。
+     display:none切替のため退場アニメは持たない(入場のみで統一感を出す) */
+  @keyframes sg-screen-in {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: none; }
+  }
   #${SC.rootId} * { box-sizing: border-box; font-family: 'Segoe UI','Hiragino Maru Gothic ProN','Yu Gothic UI',sans-serif; }
   #${SC.rootId} .hidden { display: none !important; }
 
@@ -166,6 +172,29 @@
   }
   .sg-result-table th { color: #ffe27a; font-size: 13px; }
   .sg-result-table tr.me td { color: #7ef0d8; font-weight: 900; text-shadow: 0 0 10px rgba(126,240,216,0.4); }
+  /* 初回レースの操作ガイド(6秒でフェードアウト) */
+  .sg-guide {
+    position: absolute; left: 50%; bottom: 19%; transform: translateX(-50%);
+    background: rgba(8,12,30,0.74); border: 2px solid rgba(126,240,216,0.4);
+    color: #eaf4ff; padding: 11px 26px; border-radius: 999px;
+    font-size: 15px; font-weight: 700; white-space: nowrap;
+    pointer-events: none; transition: opacity 0.6s;
+    animation: sg-screen-in 0.4s ease both;
+  }
+  .sg-guide b { color: #7ef0d8; }
+  .sg-guide.out { opacity: 0; }
+
+  /* リザルト行を1行ずつ流し込む(順位発表の間) */
+  .sg-result-table tr { animation: sg-screen-in 0.3s ease both; }
+  .sg-result-table tr:nth-child(1) { animation-delay: 0.05s; }
+  .sg-result-table tr:nth-child(2) { animation-delay: 0.13s; }
+  .sg-result-table tr:nth-child(3) { animation-delay: 0.21s; }
+  .sg-result-table tr:nth-child(4) { animation-delay: 0.29s; }
+  .sg-result-table tr:nth-child(5) { animation-delay: 0.37s; }
+  .sg-result-table tr:nth-child(6) { animation-delay: 0.45s; }
+  .sg-result-table tr:nth-child(7) { animation-delay: 0.53s; }
+  .sg-result-table tr:nth-child(8) { animation-delay: 0.61s; }
+  .sg-result-table tr:nth-child(9) { animation-delay: 0.69s; }
   .sg-rank-cell { font-weight: 900; }
 
   .sg-confetti {
@@ -381,6 +410,7 @@
         { id: 'gp', label: 'グランプリ' },
         { id: 'single', label: 'シングルレース' },
         { id: 'ta', label: 'タイムアタック' },
+        { id: 'settings', label: 'せってい' },
       ];
       this._titleMenuItems = items;
       this._titleCursor = 0;
@@ -404,6 +434,10 @@
 
     _confirmTitleMenu() {
       const it = this._titleMenuItems[this._titleCursor];
+      if (it.id === 'settings') {
+        if (Game.settings) Game.settings.open();
+        return; // 画面遷移しない(オーバーレイ)
+      }
       this.mode = it.id;
       if (it.id === 'gp') {
         this.gpCourseIdx = 0;
@@ -1089,6 +1123,25 @@
         elapsed: 0, paused: false, ended: false, endedT: 0, results: null,
       };
       this.setState('race');
+      this._maybeShowGuide();
+    },
+
+    // 初回レースだけ操作ガイドを表示(6秒後にフェードアウト)。以後は出さない
+    _maybeShowGuide() {
+      try {
+        if (localStorage.getItem('sgGuideShown')) return;
+        localStorage.setItem('sgGuideShown', '1');
+      } catch (e) { return; }
+      const touch = Game.touch && Game.touch._enabled;
+      const g = el('div', 'sg-guide');
+      g.innerHTML = touch
+        ? '右下<b>アクセル</b> / 左下<b>◀▶</b>ハンドル / <b>ドリフト</b>長押し→ためて離すと加速!'
+        : '<b>↑</b>アクセル / <b>←→</b>ハンドル / <b>SPACE</b>長押しドリフト→ためて離すと加速! / <b>E</b>アイテム';
+      this.layers.race.appendChild(g);
+      setTimeout(() => {
+        g.classList.add('out');
+        setTimeout(() => g.remove(), 700);
+      }, 6000);
     },
 
     // =========================================================
@@ -1109,11 +1162,14 @@
       resumeBtn.addEventListener('click', () => this._resumeRace());
       const restartBtn = el('div', 'sg-btn ghost', 'リスタート');
       restartBtn.addEventListener('click', () => this._restartRace());
+      const settingsBtn = el('div', 'sg-btn ghost', 'せってい');
+      settingsBtn.addEventListener('click', () => { if (Game.settings) Game.settings.open(); });
       const titleBtn = el('div', 'sg-btn ghost', 'タイトルへ戻る');
       titleBtn.addEventListener('click', () => this._quitToTitle());
       box.appendChild(resumeBtn);
       box.appendChild(document.createElement('br'));
       box.appendChild(restartBtn);
+      box.appendChild(settingsBtn);
       box.appendChild(titleBtn);
       overlay.appendChild(box);
       layer.appendChild(overlay);
@@ -1155,6 +1211,11 @@
       if (!isPaused) {
         ctx.race.update(dt);
         ctx.elapsed += dt;
+        // プレイヤーのゴール瞬間: 1.5秒のスローモーション(勝利の余韻)
+        if (!ctx._finishSlow && ctx.playerKart.finished) {
+          ctx._finishSlow = true;
+          if (Game.app.slowMo) Game.app.slowMo(1.5, 0.35);
+        }
         if (ctx.course.tick) ctx.course.tick(ctx.elapsed); // パッド流動などコース共通の軽量アニメ
         if (ctx.course.def.animate && ctx.course.group) ctx.course.def.animate(ctx.elapsed, ctx.course.group);
         // カメラ: カウントダウン中はスタート演出、ゴール後はオービット、通常は追従

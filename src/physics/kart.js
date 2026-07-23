@@ -177,9 +177,12 @@ Game.Kart = class Kart {
 
     // --- 旋回 ---
     let turnRate = 0;
+    if (d.state !== 'drifting') d.turnEase = 0.55; // 次のドリフトは55%の食い付きから始める
     if (d.state === 'drifting') {
       const inward = (steer * d.dir + 1) / 2;
-      turnRate = d.dir * U.lerp(P.driftTurnMin, P.driftTurnMax, inward) * this.turnMul;
+      // ドリフトの食い付きを約0.35秒かけて100%へ(開始瞬間に急激な直角曲がりをさせない)
+      d.turnEase = Math.min(1, (d.turnEase ?? 0.55) + dt * 1.3);
+      turnRate = d.dir * U.lerp(P.driftTurnMin, P.driftTurnMax, inward) * d.turnEase * this.turnMul;
     } else if (Math.abs(this.speed) > 0.3) {
       const spd = Math.abs(this.speed);
       const sf = U.clamp(spd / 8, 0, 1) * U.lerp(1, P.highSpeedSteerScale, U.clamp(spd / this.maxSpeed, 0, 1));
@@ -453,10 +456,26 @@ Game.Kart = class Kart {
       this._sparks.push(spark);
     }
 
-    // 丸影(動的シャドウの補助として薄く残す。ジャンプ中の接地感に効く)
-    const shadow = new THREE.Mesh(new THREE.CircleGeometry(1.5, 20),
-      new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.1, depthWrite: false }));
+    // 丸影(ブロブシャドウ): 中心が濃く縁がふわっと消える放射グラデで接地感を出す。
+    // 高さで薄く・小さくなる制御はupdateVisual側(空中と接地が体で分かる)
+    if (!Game.Kart._blobTex) {
+      const cv = document.createElement('canvas');
+      cv.width = 64; cv.height = 64;
+      const bx = cv.getContext('2d');
+      const grad = bx.createRadialGradient(32, 32, 4, 32, 32, 32);
+      grad.addColorStop(0, 'rgba(0,0,0,0.9)');
+      grad.addColorStop(0.55, 'rgba(0,0,0,0.55)');
+      grad.addColorStop(1, 'rgba(0,0,0,0)');
+      bx.fillStyle = grad;
+      bx.fillRect(0, 0, 64, 64);
+      Game.Kart._blobTex = new THREE.CanvasTexture(cv);
+    }
+    const shadow = new THREE.Mesh(new THREE.CircleGeometry(1.7, 20),
+      new THREE.MeshBasicMaterial({
+        map: Game.Kart._blobTex, transparent: true, opacity: 0.42, depthWrite: false,
+      }));
     shadow.rotation.x = -Math.PI / 2;
+    shadow.renderOrder = 1;
     this._shadow = shadow;
     g.add(shadow);
 
@@ -483,12 +502,28 @@ Game.Kart = class Kart {
     v.spinYaw = this.spinT > 0 ? (1 - this.spinT / (P.spinDuration * 1.3)) * Math.PI * 2 : 0;
     this.group.rotation.y = this.heading + v.driftYaw + v.spinYaw;
 
-    // 坂に合わせたピッチ
+    // 坂に合わせたピッチ+加減速の車体ピッチ(アクセルで後傾=ノーズ上げ、急ブレーキで前傾)
     const dirAlign = Math.cos(U.wrapAngle(this.heading - q.tangentAngle)) >= 0 ? 1 : -1;
     const slope = Math.asin(U.clamp(q.tangent.y * dirAlign, -0.9, 0.9));
-    v.pitch = U.damp(v.pitch, this.grounded ? -slope : U.clamp(-this.vy * 0.04, -0.35, 0.5), 6, dt);
+    const accelNow = dt > 1e-4 ? (this.speed - (v.prevSpeed ?? this.speed)) / dt : 0;
+    v.prevSpeed = this.speed;
+    v.accelSm = U.damp(v.accelSm || 0, U.clamp(accelNow, -22, 14), 5, dt);
+    const accelPitch = this.grounded ? U.clamp(v.accelSm * -0.005, -0.05, 0.09) : 0;
+    v.pitch = U.damp(v.pitch,
+      (this.grounded ? -slope : U.clamp(-this.vy * 0.04, -0.35, 0.5)) + accelPitch, 6, dt);
     const targetRoll = this.drift.state === 'drifting' ? -this.drift.dir * 0.1 : -steer * 0.05;
     v.roll = U.damp(v.roll, targetRoll, 6, dt);
+    // 着地サスペンション: 接地の瞬間、落下速度に応じて沈み込み→バネで復帰
+    v.susp = v.susp || 0; v.suspVel = v.suspVel || 0;
+    if (this.grounded && v.wasAir) {
+      v.suspVel = -U.clamp(Math.abs(v.landVy || 0), 3, 14) * 0.09;
+    }
+    if (!this.grounded) v.landVy = this.vy;
+    v.wasAir = !this.grounded;
+    const suspAcc = -140 * v.susp - 8 * v.suspVel;
+    v.suspVel += suspAcc * dt;
+    v.susp = U.clamp(v.susp + v.suspVel * dt, -0.16, 0.08);
+    this._tilt.position.y = v.susp;
     this._tilt.rotation.x = v.pitch;
     this._tilt.rotation.z = v.roll;
 
@@ -525,10 +560,12 @@ Game.Kart = class Kart {
       }
     }
 
-    // 影は路面に貼り付く
+    // 影は路面に貼り付く。高くなるほど小さく・薄く(接地感の核)
     this._shadow.position.y = (this.roadY - this.pos.y) + 0.04;
-    const sh = U.clamp(1 - (this.pos.y - this.roadY) * 0.06, 0.4, 1);
+    const airH = Math.max(0, this.pos.y - this.roadY);
+    const sh = U.clamp(1 - airH * 0.06, 0.4, 1);
     this._shadow.scale.setScalar(sh);
+    this._shadow.material.opacity = U.clamp(0.42 - airH * 0.045, 0.12, 0.42);
 
     // リスポーン直後は点滅
     this.group.visible = this.lockT > 0 ? (Math.floor(this.lockT * 12) % 2 === 0) : true;

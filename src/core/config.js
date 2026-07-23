@@ -15,8 +15,9 @@ Game.config = {
     hopImpulse: 3.2,         // ドリフト開始ホップの上向き初速(滞空≈0.32秒)
     gravity: 20,
     driftMinSpeed: 13,       // これ未満ではドリフト不可/強制解除
-    driftTurnMin: 0.55,      // ドリフト中の最小旋回(外側へ当て舵時)
-    driftTurnMax: 2.75,      // ドリフト中の最大旋回(内側へフル舵時)
+    driftTurnMin: 0.6,       // ドリフト中の最小旋回(外側へ当て舵時)
+    driftTurnMax: 2.15,      // ドリフト中の最大旋回(内側へフル舵時)。2.75では約0.6秒で直角に
+                             // 曲がってしまうためユーザーFBで低減(実プレイ第4回)
     driftChargeBase: 0.75,   // ミニターボ充填速度(基礎)
     driftChargeSteer: 0.55,  // 内側フル舵での追加充填
     miniTurbo: [             // 3段階: 青→橙→紫
