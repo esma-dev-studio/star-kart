@@ -125,7 +125,9 @@
     const side = rnd() < 0.5 ? 1 : -1;
     const ry = rnd() * Math.PI * 2;
     ctx.solid(new THREE.BoxGeometry(1.6, h, 1.6), col, x, h / 2, z, ry);
-    const dx = Math.cos(ry) * boomLen * side, dz = Math.sin(ry) * boomLen * side;
+    // rotation.y=ry のとき、Box長軸(+X)はワールドの (cos ry, 0, -sin ry) を向く。
+    // オフセットも同じ向きに取らないとブームがマストから離れて浮く
+    const dx = Math.cos(ry) * boomLen * side, dz = -Math.sin(ry) * boomLen * side;
     ctx.solid(new THREE.BoxGeometry(boomLen, 1.3, 1.3), col, x + dx * 0.5, h - 1.5, z + dz * 0.5, ry);
     if (rnd() < 0.6) ctx.accent(x + dx, h - 1, z + dz, 0.8 + rnd() * 0.5, glowCol);
   }
@@ -349,13 +351,16 @@
 
     const slots = ringSlots(centroid, monoN, RING.inMin, RING.inMax, rnd, rnd() * Math.PI * 2);
     let glowGiven = 0;
-    for (const { x, z } of slots) {
+    for (let i = 0; i < slots.length; i++) {
+      const { x, z } = slots[i];
       const col = vary(innerCol, rnd, 0.2);
       const h = 24 + rnd() * 30, w = 2.2 + rnd() * 1.4;
       const tiltDeg = 5 + rnd() * 10; // 5〜15°
       const tilt = tiltDeg * Math.PI / 180 * (rnd() < 0.5 ? 1 : -1);
       ctx.solid(new THREE.BoxGeometry(w, h, w * 0.85), col, x, h / 2, z, rnd() * Math.PI * 2, 0, tilt);
-      if (glowGiven < 4 && rnd() < 0.5) { // クリムゾンの発光点は控えめに数個だけ
+      // クリムゾンの発光点は「少々」に留める: 3本に1本は確定、残りは確率的に(シード次第でゼロにならないようにする)
+      const wantGlow = glowGiven < 4 && (i % 3 === 0 || rnd() < 0.35);
+      if (wantGlow) {
         ctx.accent(x, h * (0.5 + rnd() * 0.4), z, 0.6 + rnd() * 0.5, crimson);
         glowGiven++;
       }
