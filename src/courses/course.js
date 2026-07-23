@@ -75,9 +75,25 @@ Game.Course = class Course {
     // 少しだけ手前の路面上に戻す。fallZoneは縁の外に落ちるだけで路面自体は存在するので
     // 進行度は保持する(ゾーン先頭まで巻き戻すと落下のたびに大幅後退が蓄積してしまう)。
     let t = (progress - 4 / s.count + 1) % 1;
-    // ギャップ(路面が無い区間)だけはその手前へ
-    const gap = this.inZone(this.gaps, t);
-    if (gap) t = (gap.t0 - 0.01 + 1) % 1;
+    // ギャップ+連動ジャンプ台+助走域は「復帰不能ストリップ」として一括で扱う。
+    // この範囲のどこに湧いても、(a)台の内側=発射されない (b)台とギャップの間=助走ゼロ
+    // (c)ギャップ内=路面なし で再落下ループになる(シンギュラリティで実際に発生。
+    // 落下は進行度がギャップ前縁のことが多く、-4/countの戻しだけでは旧来の
+    // 「ギャップ内判定→手前へ」すら発動しないケースがあった)。
+    // ストリップに入っていたら、その先頭(台の手前12ユニット=助走確保)まで巻き戻す。
+    const runup = 12 / s.total;
+    for (const gap of this.gaps) {
+      let stripStart = (gap.t0 - 0.01 + 1) % 1;
+      for (const p of this.pads) {
+        if (p.type !== 'jump') continue;
+        // ギャップの手前0.05以内で終わる台=このギャップ用の発射台
+        if (p.t1 <= gap.t0 + 1e-6 && (gap.t0 - p.t0) < 0.05) {
+          stripStart = Math.min(stripStart, (p.t0 - runup + 1) % 1);
+        }
+      }
+      // ※現状の全コースでストリップは0-1の内側に収まる(t=0跨ぎのギャップは無い)
+      if (t >= stripStart && t <= gap.t1) { t = stripStart; break; }
+    }
     const idx = Math.floor(t * s.count) % s.count;
     return {
       pos: s.pts[idx].clone().add(new THREE.Vector3(0, 0.2, 0)),
