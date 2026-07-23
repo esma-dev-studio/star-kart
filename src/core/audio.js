@@ -212,6 +212,9 @@
   let compressorNode = null;
   let noiseBuffer = null;
   let ready = false;
+  // URLに ?mute=1 が付いていたら最初から消音する(自動テスト・検証セッション用。
+  // リロードしてもクエリは残るので、検証中に音が漏れない)
+  let muted = /[?&]mute=1/.test(location.search);
 
   // ==== BGMシーケンサ状態 ====
   let currentBgmId = null;
@@ -246,7 +249,7 @@
     try {
       ctx = new AC();
       masterGainNode = ctx.createGain();
-      masterGainNode.gain.value = C.masterGain;
+      masterGainNode.gain.value = muted ? 0 : C.masterGain;
       compressorNode = ctx.createDynamicsCompressor();
       compressorNode.threshold.value = C.compressor.threshold;
       compressorNode.knee.value = C.compressor.knee;
@@ -695,6 +698,13 @@
   });
 
   window.Game = window.Game || {};
+  // 消音の切替(音声処理は動かしたままマスターだけ0にする)。
+  // 検証・バックグラウンド作業でゲームを動かす時は最初にこれを呼ぶこと
+  const setMuted = safe(function (on) {
+    muted = !!on;
+    if (masterGainNode) masterGainNode.gain.value = muted ? 0 : C.masterGain;
+  });
+
   Game.audio = {
     init,
     playBgm,
@@ -704,5 +714,6 @@
     attachKart,
     update,
     detachAll,
+    setMuted,
   };
 })();

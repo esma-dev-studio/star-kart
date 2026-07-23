@@ -197,19 +197,25 @@
 }
 @keyframes hudGoRainbow { from { background-position: 0% 0; } to { background-position: 200% 0; } }
 
-/* ---- ブースト時のスピードライン ---- */
+/* ---- ブースト時のスピードライン ----
+   中央36%はマスクで抜いて視界を確保し、外周だけに放射ラインを出す。
+   ゆっくり回転させて「風を切る」動きを付ける(DOMアニメのみ、描画負荷ほぼゼロ) */
 #hudSpeedLines {
-  position: absolute; inset: 0; pointer-events: none;
+  position: absolute; inset: -12%; pointer-events: none;
   opacity: 0; transition: opacity ${HUD_TUNING.speedLinesFadeSec}s;
   background:
     repeating-conic-gradient(from 0deg at 50% 50%,
-      rgba(255,255,255,0.22) 0deg 1.4deg, transparent 1.4deg 9deg);
+      rgba(255,255,255,0.30) 0deg 1.6deg, transparent 1.6deg 8.4deg);
   mix-blend-mode: screen;
+  -webkit-mask-image: radial-gradient(ellipse at center, transparent 0 36%, black 80%);
+  mask-image: radial-gradient(ellipse at center, transparent 0 36%, black 80%);
+  animation: hud-lines-spin 1.1s linear infinite;
 }
-#hudSpeedLines.on { opacity: 0.6; }
+#hudSpeedLines.on { opacity: 0.75; }
 #hudSpeedLines.boostGlow { background:
     repeating-conic-gradient(from 0deg at 50% 50%,
-      rgba(255,140,50,0.30) 0deg 1.4deg, transparent 1.4deg 9deg); }
+      rgba(255,150,60,0.38) 0deg 1.6deg, transparent 1.6deg 8.4deg); }
+@keyframes hud-lines-spin { from { transform: rotate(0deg); } to { transform: rotate(8.4deg); } }
 `;
     document.head.appendChild(style);
   }

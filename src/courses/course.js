@@ -161,6 +161,7 @@ Game.Course = class Course {
     g.add(skirtR); g.add(skirtL);
 
     // ブースト/ジャンプパッド
+    this._padAnim = [];
     const padMeshes = this.pads.map((p) => this.buildPadMesh(p));
     for (const m of padMeshes) g.add(m);
 
@@ -180,9 +181,19 @@ Game.Course = class Course {
 
     if (this.def.decorate) this.def.decorate(g, this);
 
+    // 遠景シルエットリング(地平線の世界観。静的メッシュのみ)
+    if (Game.horizon) {
+      let hcx = 0, hcz = 0;
+      for (const p of s.pts) { hcx += p.x; hcz += p.z; }
+      g.add(Game.horizon.build(this.def, { x: hcx / s.count, z: hcz / s.count }));
+    }
+    // フェイクブルーム: 発光メッシュへ光暈Spriteを自動付与(装飾・遠景の後に走査)
+    if (Game.bloomSprites) Game.bloomSprites.build(g);
+
     // 動的シャドウ: 装飾・ゲート・看板は影を落とし、路面・地面は受けるだけにする
     g.traverse((o) => {
-      if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; }
+      // userData.noShadow: 遠景シルエット等、影計算から外す軽量メッシュの印
+      if (o.isMesh && !o.userData.noShadow) { o.castShadow = true; o.receiveShadow = true; }
     });
     const noCast = [dome, ground, roadMesh, skirtR, skirtL, startLine, ...padMeshes];
     if (horizon) noCast.push(...horizon.children);
@@ -365,67 +376,158 @@ Game.Course = class Course {
     grad.addColorStop(1, '#' + fcol.getHexString());
     x.fillStyle = grad;
     x.fillRect(0, 0, 512, 512);
-    // うっすら斑点でのっぺり感を消す
-    x.fillStyle = '#' + gcol.clone().multiplyScalar(0.93).getHexString();
     let seed = 7;
     const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
-    for (let i = 0; i < 260; i++) {
-      const px = rnd() * 512, py = rnd() * 512, r = 2 + rnd() * 6;
+    // 大きな明暗ブロッチ(地形の起伏感)
+    for (let i = 0; i < 8; i++) {
+      const px = 60 + rnd() * 392, py = 60 + rnd() * 392, r = 46 + rnd() * 70;
+      const g2 = x.createRadialGradient(px, py, 0, px, py, r);
+      g2.addColorStop(0, rnd() < 0.5 ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.05)');
+      g2.addColorStop(1, 'rgba(0,0,0,0)');
+      x.fillStyle = g2;
+      x.fillRect(px - r, py - r, r * 2, r * 2);
+    }
+    // 二色の斑点でのっぺり感を消す
+    const darker = '#' + gcol.clone().multiplyScalar(0.90).getHexString();
+    const lc = gcol.clone().multiplyScalar(1.08);
+    lc.r = Math.min(1, lc.r); lc.g = Math.min(1, lc.g); lc.b = Math.min(1, lc.b); // getHexは1超で桁あふれする
+    const lighter = '#' + lc.getHexString();
+    for (let i = 0; i < 380; i++) {
+      x.fillStyle = rnd() < 0.62 ? darker : lighter;
+      const px = rnd() * 512, py = rnd() * 512, r = 1.6 + rnd() * 5.5;
       if (Math.hypot(px - 256, py - 256) > 235) continue;
+      x.globalAlpha = 0.5 + rnd() * 0.5;
       x.beginPath(); x.arc(px, py, r, 0, Math.PI * 2); x.fill();
     }
+    x.globalAlpha = 1;
     return new THREE.CanvasTexture(cv);
   }
 
+  // 路面テクスチャv2(512px): 摩耗レーン・スキッド跡・補修パッチ・発光ハロー付き
+  // センターライン・ベベル縁石で「走り込まれたサーキット」の情報量を出す。
+  // 生成は一度きりなので実行時コストはゼロ
   roadTexture(c) {
     const cv = document.createElement('canvas');
-    cv.width = 256; cv.height = 256;
+    cv.width = 512; cv.height = 512;
     const x = cv.getContext('2d');
-    x.fillStyle = c.road; x.fillRect(0, 0, 256, 256);
+    x.fillStyle = c.road; x.fillRect(0, 0, 512, 512);
     let seed = 42;
     const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
-    // 舗装の粒状ノイズ(細かく大量に)
-    for (let i = 0; i < 900; i++) {
+    const CURB_W = 36, ROAD_L = CURB_W, ROAD_R = 512 - CURB_W;
+
+    // 大きめの舗装ムラ(うっすら明暗のまだら)
+    for (let i = 0; i < 14; i++) {
+      const px = ROAD_L + rnd() * (ROAD_R - ROAD_L), py = rnd() * 512, r = 40 + rnd() * 60;
+      const g2 = x.createRadialGradient(px, py, 0, px, py, r);
+      const dark = rnd() < 0.5;
+      g2.addColorStop(0, dark ? 'rgba(0,0,0,0.045)' : 'rgba(255,255,255,0.035)');
+      g2.addColorStop(1, 'rgba(0,0,0,0)');
+      x.fillStyle = g2;
+      x.fillRect(px - r, py - r, r * 2, r * 2);
+    }
+    // 補修パッチ(色味の違う四角い舗装)
+    for (let i = 0; i < 5; i++) {
+      const pw = 40 + rnd() * 70, ph = 70 + rnd() * 120;
+      const px = ROAD_L + 10 + rnd() * (ROAD_R - ROAD_L - pw - 20), py = rnd() * 512;
+      x.fillStyle = 'rgba(0,0,0,0.05)';
+      x.fillRect(px, py, pw, ph);
+      x.strokeStyle = 'rgba(255,255,255,0.04)'; x.lineWidth = 2;
+      x.strokeRect(px, py, pw, ph);
+    }
+    // 舗装の粒状ノイズ
+    for (let i = 0; i < 1600; i++) {
       x.fillStyle = rnd() < 0.5 ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.06)';
-      const px = rnd() * 256, py = rnd() * 256, r = 0.6 + rnd() * 1.6;
+      const px = rnd() * 512, py = rnd() * 512, r = 0.6 + rnd() * 1.8;
       x.beginPath(); x.arc(px, py, r, 0, Math.PI * 2); x.fill();
     }
-    // タイヤの走行帯(車輪が通るラインがうっすら暗い)
-    x.fillStyle = 'rgba(0,0,0,0.07)';
-    x.fillRect(56, 0, 44, 256);
-    x.fillRect(156, 0, 44, 256);
-    // 舗装のひび
-    x.strokeStyle = 'rgba(0,0,0,0.12)'; x.lineWidth = 1.4;
-    for (let cI = 0; cI < 5; cI++) {
+    // 舗装の敷設方向の細い筋
+    for (let i = 0; i < 26; i++) {
+      x.fillStyle = `rgba(${rnd() < 0.5 ? '255,255,255' : '0,0,0'},0.025)`;
+      x.fillRect(ROAD_L + rnd() * (ROAD_R - ROAD_L), 0, 1 + rnd() * 1.5, 512);
+    }
+    // タイヤの走行帯(端がソフトに消える摩耗レーン)
+    for (const bandCx of [156, 356]) {
+      const bw = 110;
+      const g2 = x.createLinearGradient(bandCx - bw / 2, 0, bandCx + bw / 2, 0);
+      g2.addColorStop(0, 'rgba(0,0,0,0)');
+      g2.addColorStop(0.5, 'rgba(0,0,0,0.11)');
+      g2.addColorStop(1, 'rgba(0,0,0,0)');
+      x.fillStyle = g2;
+      x.fillRect(bandCx - bw / 2, 0, bw, 512);
+    }
+    // スキッド跡(ブレーキング痕。低アルファの短い弧)
+    x.lineCap = 'round';
+    for (let i = 0; i < 9; i++) {
+      const nearLeft = rnd() < 0.5;
+      let sx = nearLeft ? 70 + rnd() * 90 : 350 + rnd() * 90;
+      let sy = rnd() * 512;
+      const bend = (rnd() - 0.5) * 60;
+      x.strokeStyle = `rgba(8,6,10,${0.10 + rnd() * 0.08})`;
+      x.lineWidth = 3.5 + rnd() * 2.5;
       x.beginPath();
-      let cx0 = 30 + rnd() * 196, cy0 = rnd() * 256;
-      x.moveTo(cx0, cy0);
-      for (let sI = 0; sI < 4; sI++) { cx0 += (rnd() - 0.5) * 30; cy0 += 12 + rnd() * 22; x.lineTo(cx0, cy0); }
+      x.moveTo(sx, sy);
+      x.quadraticCurveTo(sx + bend, sy + 45 + rnd() * 40, sx + bend * 1.6, sy + 90 + rnd() * 70);
       x.stroke();
     }
-    // センターの破線(色はコース定義で変更可)
-    x.fillStyle = c.centerLine || 'rgba(255,250,235,0.6)';
-    for (let yPos = 8; yPos < 256; yPos += 64) x.fillRect(124, yPos, 8, 34);
-    // 両端のキャンディ縁石(斜めストライプ。レース感と世界観を両立)
+    // 舗装のひび
+    x.strokeStyle = 'rgba(0,0,0,0.10)'; x.lineWidth = 1.6;
+    for (let cI = 0; cI < 7; cI++) {
+      x.beginPath();
+      let cx0 = ROAD_L + 20 + rnd() * (ROAD_R - ROAD_L - 40), cy0 = rnd() * 512;
+      x.moveTo(cx0, cy0);
+      for (let sI = 0; sI < 4; sI++) { cx0 += (rnd() - 0.5) * 50; cy0 += 20 + rnd() * 40; x.lineTo(cx0, cy0); }
+      x.stroke();
+    }
+    // センターの破線(ソフトなハロー→コア→白のハイライトの3層でネオン管に見せる)
+    const clCol = c.centerLine || '#fff5e0';
+    for (let yPos = 16; yPos < 512; yPos += 128) {
+      x.globalAlpha = 0.16; x.fillStyle = clCol;
+      x.fillRect(240, yPos - 6, 32, 80);   // ハロー
+      x.globalAlpha = 0.95;
+      x.fillRect(249, yPos, 14, 68);        // コア
+      x.globalAlpha = 0.55; x.fillStyle = '#ffffff';
+      x.fillRect(254, yPos + 4, 4, 60);     // 芯のハイライト
+      x.globalAlpha = 1;
+    }
+    // 縁石の内側: エッジライン+路肩の汚れだまり
+    const edgeCol = c.edge || '#ffffff';
+    for (const [ex, gdir] of [[ROAD_L + 4, 1], [ROAD_R - 8, -1]]) {
+      x.globalAlpha = 0.5; x.fillStyle = edgeCol;
+      x.fillRect(ex, 0, 4, 512);
+      x.globalAlpha = 1;
+      const g2 = x.createLinearGradient(ex + gdir * 4, 0, ex + gdir * 26, 0);
+      g2.addColorStop(0, 'rgba(0,0,0,0.16)');
+      g2.addColorStop(1, 'rgba(0,0,0,0)');
+      x.fillStyle = g2;
+      x.fillRect(Math.min(ex + gdir * 4, ex + gdir * 26), 0, 22, 512);
+    }
+    // ベベル付き縁石(ストライプごとに下端へ影を落として立体に見せる)
     const curb = c.curb || '#ff6f91';
-    const curbW = 18;
-    const drawCurb = (x0) => {
+    const drawCurb = (x0, outerDir) => {
       x.save();
-      x.beginPath(); x.rect(x0, 0, curbW, 256); x.clip();
-      x.fillStyle = '#fff6f0'; x.fillRect(x0, 0, curbW, 256);
-      x.fillStyle = curb;
-      for (let yPos = -32; yPos < 288; yPos += 32) {
+      x.beginPath(); x.rect(x0, 0, CURB_W, 512); x.clip();
+      const base = x.createLinearGradient(x0, 0, x0 + CURB_W, 0);
+      if (outerDir < 0) { base.addColorStop(0, '#cfcfd4'); base.addColorStop(0.45, '#ffffff'); base.addColorStop(1, '#f2f2f5'); }
+      else { base.addColorStop(0, '#f2f2f5'); base.addColorStop(0.55, '#ffffff'); base.addColorStop(1, '#cfcfd4'); }
+      x.fillStyle = base; x.fillRect(x0, 0, CURB_W, 512);
+      for (let yPos = -64; yPos < 576; yPos += 64) {
+        x.fillStyle = curb;
         x.beginPath();
-        x.moveTo(x0, yPos); x.lineTo(x0 + curbW, yPos + 14);
-        x.lineTo(x0 + curbW, yPos + 30); x.lineTo(x0, yPos + 16);
+        x.moveTo(x0, yPos); x.lineTo(x0 + CURB_W, yPos + 28);
+        x.lineTo(x0 + CURB_W, yPos + 60); x.lineTo(x0, yPos + 32);
+        x.closePath(); x.fill();
+        x.fillStyle = 'rgba(0,0,0,0.22)';   // ストライプ下端の落ち影
+        x.beginPath();
+        x.moveTo(x0, yPos + 26); x.lineTo(x0 + CURB_W, yPos + 54);
+        x.lineTo(x0 + CURB_W, yPos + 60); x.lineTo(x0, yPos + 32);
         x.closePath(); x.fill();
       }
       x.restore();
     };
-    drawCurb(0); drawCurb(256 - curbW);
+    drawCurb(0, -1); drawCurb(512 - CURB_W, 1);
     const tex = new THREE.CanvasTexture(cv);
     tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping;
-    tex.anisotropy = 4;
+    tex.anisotropy = 8;
     return tex;
   }
 
@@ -449,21 +551,48 @@ Game.Course = class Course {
     geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
     geo.setIndex(idxArr);
+    // パッド表面(128px): 発光ハロー付きシェブロン。テクスチャはtick()で流動する
     const cv = document.createElement('canvas');
-    cv.width = 64; cv.height = 64;
+    cv.width = 128; cv.height = 128;
     const x = cv.getContext('2d');
     if (p.type === 'boost') {
-      x.fillStyle = '#28d9e8'; x.fillRect(0, 0, 64, 64);
-      x.fillStyle = '#eafffe';
-      x.beginPath(); x.moveTo(8, 12); x.lineTo(32, 34); x.lineTo(56, 12);
-      x.lineTo(56, 26); x.lineTo(32, 50); x.lineTo(8, 26); x.closePath(); x.fill();
+      const bg = x.createLinearGradient(0, 0, 0, 128);
+      bg.addColorStop(0, '#0f7d8c'); bg.addColorStop(0.5, '#28d9e8'); bg.addColorStop(1, '#0f7d8c');
+      x.fillStyle = bg; x.fillRect(0, 0, 128, 128);
+      const chev = (yy, col, alpha, lw) => {
+        x.globalAlpha = alpha; x.strokeStyle = col; x.lineWidth = lw;
+        x.lineJoin = 'round'; x.lineCap = 'round';
+        x.beginPath(); x.moveTo(18, yy); x.lineTo(64, yy + 40); x.lineTo(110, yy);
+        x.stroke();
+      };
+      chev(24, '#bffcff', 0.35, 26); // ハロー
+      chev(24, '#eafffe', 0.95, 12); // コア
+      chev(24, '#ffffff', 0.8, 4);   // 芯
+      x.globalAlpha = 1;
     } else {
-      x.fillStyle = '#ff9d3c'; x.fillRect(0, 0, 64, 64);
-      x.fillStyle = '#ffe6c2'; x.fillRect(0, 24, 64, 16);
+      const bg = x.createLinearGradient(0, 0, 0, 128);
+      bg.addColorStop(0, '#9c4f10'); bg.addColorStop(0.5, '#ff9d3c'); bg.addColorStop(1, '#9c4f10');
+      x.fillStyle = bg; x.fillRect(0, 0, 128, 128);
+      x.globalAlpha = 0.35; x.fillStyle = '#ffe6c2';
+      x.fillRect(0, 40, 128, 48);   // ハロー帯
+      x.globalAlpha = 0.95;
+      x.fillRect(0, 52, 128, 24);   // コア帯
+      x.globalAlpha = 0.7; x.fillStyle = '#ffffff';
+      x.fillRect(0, 61, 128, 6);    // 芯
+      x.globalAlpha = 1;
     }
     const tex = new THREE.CanvasTexture(cv);
     tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping;
+    this._padAnim.push({ tex, type: p.type });
     return new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: tex }));
+  }
+
+  // 毎フレームの軽量アニメ(パッドのシェブロン流動)。screensのレース更新から呼ばれる。
+  // テクスチャoffsetの書き換えのみで頂点・Canvasの再生成はしない
+  tick(time) {
+    for (const pa of this._padAnim) {
+      pa.tex.offset.y = -time * (pa.type === 'boost' ? 1.5 : 0.9);
+    }
   }
 
   // ==================== コース検証(CourseValidator) ====================

@@ -160,6 +160,8 @@ const ITEM_DEFS = {
       const g = new THREE.Group();
       const box = new THREE.Mesh(sh.boxGeo, sh.boxMat);
       g.add(box);
+      // フェイクブルーム: 箱のまわりに柔らかい金色の光暈(視認性=遠くからでも見つかる)
+      if (Game.bloomSprites) g.add(Game.bloomSprites.make(0xffd94a, 3.4));
       g.userData.box = box;
       return g;
     },

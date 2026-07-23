@@ -66,9 +66,19 @@
   .sg-title-logo {
     text-align: center; margin-top: 6vh;
     font-size: 88px; font-weight: 900; letter-spacing: 2px;
-    background: linear-gradient(180deg, #fff9d0 0%, #ffe27a 34%, #7ef0d8 68%, #3a9bff 100%);
+    /* シャインスイープ: グラデを横に3倍で敷き、background-positionを流す(clip:textと両立) */
+    background: linear-gradient(115deg,
+      #fff9d0 0%, #ffe27a 16%, #7ef0d8 34%, #3a9bff 48%,
+      #ffffff 52%, #3a9bff 56%,
+      #7ef0d8 70%, #ffe27a 86%, #fff9d0 100%);
+    background-size: 300% 100%;
     -webkit-background-clip: text; background-clip: text; color: transparent;
     filter: drop-shadow(0 5px 0 #14205a) drop-shadow(0 0 26px rgba(80,170,255,0.55)) drop-shadow(0 14px 22px rgba(0,10,40,0.6));
+    animation: sg-logo-sheen 5.5s ease-in-out infinite;
+  }
+  @keyframes sg-logo-sheen {
+    0%, 62% { background-position: 0% 0; }
+    88%, 100% { background-position: 100% 0; }
   }
   .sg-title-sub {
     text-align: center; margin-top: 4px; font-size: 22px; font-weight: 700;
@@ -130,7 +140,11 @@
   .sg-course-hint { text-align: center; color: #9fb4e8; font-size: 14px; font-weight: 700; margin: -6px 0 12px; min-height: 18px; }
   .sg-course-card:hover { transform: translateY(-3px); }
   .sg-course-card.selected { border-color: #ffd94a; box-shadow: 0 0 0 4px rgba(255,217,74,0.3), 0 0 22px rgba(255,190,60,0.35); transform: translateY(-4px) scale(1.03); }
-  .sg-course-thumb { width: 100%; height: 96px; border-radius: 14px; margin-bottom: 10px; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.18), inset 0 -18px 24px rgba(0,0,0,0.25); }
+  .sg-course-thumb {
+    width: 100%; height: 96px; border-radius: 14px; margin-bottom: 10px;
+    background-size: cover; background-position: center;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.18), inset 0 -18px 24px rgba(0,0,0,0.25);
+  }
   .sg-course-name { font-weight: 900; color: #eaf4ff; font-size: 16px; margin-bottom: 4px; }
   .sg-course-stars { color: #ffd94a; font-size: 18px; letter-spacing: 2px; text-shadow: 0 0 8px rgba(255,200,60,0.45); }
   .sg-course-best { margin-top: 6px; font-size: 12px; color: #8fa0cc; }
@@ -743,6 +757,89 @@
       return `linear-gradient(180deg, ${sky} 0%, ${sky} 45%, ${road} 46%, ${road} 100%)`;
     },
 
+    // =========================================================
+    // コース選択の実3Dサムネイル(各コースを一度だけ空撮レンダリングしてキャッシュ)
+    // =========================================================
+    _ensureCourseThumb(id, thumbEl) {
+      this._thumbCache = this._thumbCache || {};
+      if (this._thumbCache[id]) {
+        this._applyThumb(thumbEl, this._thumbCache[id]);
+        return;
+      }
+      // 生成は1コースずつ直列に(同時生成でフレームを落とさない)
+      this._thumbQueue = (this._thumbQueue || Promise.resolve()).then(() => {
+        if (this._thumbCache[id]) { this._applyThumb(thumbEl, this._thumbCache[id]); return; }
+        return new Promise((res) => setTimeout(res, 0)).then(() => {
+          try {
+            const url = this._renderCourseThumb(id);
+            if (url) { this._thumbCache[id] = url; this._applyThumb(thumbEl, url); }
+          } catch (e) { /* 失敗時はプレースホルダのまま(致命ではない) */ }
+        });
+      });
+    },
+
+    _applyThumb(el2, url) {
+      if (!el2 || !el2.isConnected) return;
+      el2.style.background = `url(${url})`;
+      el2.style.backgroundSize = 'cover';
+      el2.style.backgroundPosition = 'center';
+    },
+
+    _renderCourseThumb(id) {
+      const def = Game.courses[id];
+      if (!def) return null;
+      if (!this._thumbRenderer) {
+        this._thumbRenderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+        this._thumbRenderer.setSize(320, 192, false);
+        this._thumbRenderer.outputEncoding = THREE.sRGBEncoding;
+        this._thumbRenderer.toneMapping = THREE.ACESFilmicToneMapping;
+        this._thumbRenderer.toneMappingExposure = 1.05;
+      }
+      const scene = new THREE.Scene();
+      const course = new Game.Course(def);
+      course.build(scene);
+      // 空撮距離では走行用の指数フォグが濃すぎて真っ白になる(スターシタデルで実証)。
+      // 色味だけ残して密度を大きく下げる
+      if (scene.fog && scene.fog.density) {
+        scene.fog = new THREE.FogExp2(scene.fog.color.getHex(), scene.fog.density * 0.18);
+      }
+      // コース定義の照明を再現(レース本編のライティングに寄せる)
+      const L = def.lighting || {};
+      const hemi = new THREE.HemisphereLight(L.hemiSky ?? 0xbfd9ff, L.hemiGround ?? 0x3a3550, L.hemiIntensity ?? 0.55);
+      scene.add(hemi);
+      const sun = new THREE.DirectionalLight(L.sunColor ?? 0xffffff, L.sunIntensity ?? 0.9);
+      sun.position.set(80, 120, 60);
+      scene.add(sun);
+      this._thumbRenderer.toneMappingExposure = (L.exposure ?? 1.05);
+      // コース全体が収まる斜め空撮カメラ
+      let minX = 1e9, maxX = -1e9, minZ = 1e9, maxZ = -1e9;
+      for (const p of course.minimap) {
+        if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+        if (p.z < minZ) minZ = p.z; if (p.z > maxZ) maxZ = p.z;
+      }
+      const cx = (minX + maxX) / 2, cz = (minZ + maxZ) / 2;
+      const span = Math.max(maxX - minX, maxZ - minZ);
+      const cam = new THREE.PerspectiveCamera(45, 320 / 192, 1, 2000);
+      const dist = span * 0.98 + 60;
+      cam.position.set(cx + dist * 0.42, dist * 0.62, cz + dist * 0.52);
+      cam.lookAt(cx, 0, cz);
+      this._thumbRenderer.render(scene, cam);
+      const url = this._thumbRenderer.domElement.toDataURL('image/jpeg', 0.85);
+      // 後始末: ジオメトリと(共有でない)マテリアル/テクスチャを破棄
+      scene.traverse((o) => {
+        if (o.isMesh && !o.isSprite) {
+          if (o.geometry) o.geometry.dispose();
+          const mats = Array.isArray(o.material) ? o.material : [o.material];
+          for (const m of mats) {
+            if (!m) continue;
+            if (m.map) m.map.dispose();
+            m.dispose();
+          }
+        }
+      });
+      return url;
+    },
+
     _populateCourseGrid() {
       this._courseGridEl.innerHTML = '';
       this._courseIds.forEach((id, i) => {
@@ -751,7 +848,8 @@
         const pick = el('div', 'sg-course-pick hidden', '');
         card.appendChild(pick);
         const thumb = el('div', 'sg-course-thumb');
-        thumb.style.background = this._courseThumbColor(id);
+        thumb.style.background = this._courseThumbColor(id); // 生成完了までのプレースホルダ
+        this._ensureCourseThumb(id, thumb);                  // 実3D空撮に差し替え(初回のみ描画)
         card.appendChild(thumb);
         card.appendChild(el('div', 'sg-course-name', def.displayName || id));
         const d = SC.courseDifficulty[id] || 1;
@@ -1057,6 +1155,7 @@
       if (!isPaused) {
         ctx.race.update(dt);
         ctx.elapsed += dt;
+        if (ctx.course.tick) ctx.course.tick(ctx.elapsed); // パッド流動などコース共通の軽量アニメ
         if (ctx.course.def.animate && ctx.course.group) ctx.course.def.animate(ctx.elapsed, ctx.course.group);
         // カメラ: カウントダウン中はスタート演出、ゴール後はオービット、通常は追従
         if (ctx.race.phase === 'countdown') {
